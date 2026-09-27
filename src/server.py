@@ -4,9 +4,20 @@ Exposes 4 consolidated endpoints with 0-based indexing contracts and low-level X
 for token-efficient Word document manipulation in Antigravity IDE.
 """
 
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 from fastmcp import FastMCP
-from src.oxml_engine import DocxEngine
+
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from src.oxml_engine import DocxEngine
+except ImportError:
+    from oxml_engine import DocxEngine
 
 # Initialize FastMCP Server
 mcp = FastMCP("word-docx")

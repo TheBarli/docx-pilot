@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+import xml.etree.ElementTree as ET
+import zipfile
 import docx
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
@@ -471,3 +475,79 @@ class DocxEngine:
             "affected_locations_count": len(details),
             "sample_locations": details[:10],
         }
+
+    @staticmethod
+    def debloat_document(file_path: str) -> Dict[str, Any]:
+        """Strip embedded font bloat, remove font embedding flags, and recompress media.
+
+        Matches lean academic document standards by removing unneeded embedded system
+        fonts (which can add 15-25MB of bloat) and enforcing ZIP_DEFLATED on all entries.
+        """
+        path = normalize_path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        size_before = os.path.getsize(path)
+
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+
+        try:
+            with zipfile.ZipFile(str(path), "r") as zin, zipfile.ZipFile(
+                str(tmp_path), "w", compression=zipfile.ZIP_DEFLATED
+            ) as zout:
+                for item in zin.infolist():
+                    if item.filename.startswith("word/fonts/") or item.filename == "word/_rels/fontTable.xml.rels":
+                        continue
+
+                    content = zin.read(item.filename)
+
+                    if item.filename == "word/settings.xml":
+                        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+                        ET.register_namespace("w", ns["w"])
+                        root = ET.fromstring(content)
+                        for tag in ["w:embedTrueTypeFonts", "w:doNotEmbedSystemFonts", "w:saveSubsetFonts"]:
+                            el = root.find(tag, ns)
+                            if el is not None:
+                                root.remove(el)
+                        content = ET.tostring(root, xml_declaration=True, encoding="utf-8")
+
+                    if item.filename == "word/fontTable.xml":
+                        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+                        ET.register_namespace("w", ns["w"])
+                        root = ET.fromstring(content)
+                        for font in root.findall("w:font", ns):
+                            for embed_tag in ["w:embedRegular", "w:embedBold", "w:embedItalic", "w:embedBoldItalic"]:
+                                em = font.find(embed_tag, ns)
+                                if em is not None:
+                                    font.remove(em)
+                        content = ET.tostring(root, xml_declaration=True, encoding="utf-8")
+
+                    new_item = zipfile.ZipInfo(item.filename)
+                    new_item.compress_type = zipfile.ZIP_DEFLATED
+                    new_item.external_attr = item.external_attr
+                    zout.writestr(new_item, content)
+
+            # Integrity check
+            test_doc = docx.Document(str(tmp_path))
+            p_count = len(test_doc.paragraphs)
+            t_count = len(test_doc.tables)
+
+            shutil.move(str(tmp_path), str(path))
+            size_after = os.path.getsize(path)
+            saved = size_before - size_after
+
+            return {
+                "status": "success",
+                "file_path": str(path),
+                "size_before_bytes": size_before,
+                "size_after_bytes": size_after,
+                "space_saved_bytes": saved,
+                "space_saved_mb": round(saved / (1024 * 1024), 2),
+                "paragraphs_count": p_count,
+                "tables_count": t_count,
+            }
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+

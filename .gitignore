@@ -17,3 +17,8 @@ htmlcov/
 
 # Temporary / Scratch
 *.tmp
+
+# Word Documents
+*.docx
+documents/*.docx
+!documents/.gitkeep
