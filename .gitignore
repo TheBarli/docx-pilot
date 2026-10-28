@@ -17,3 +17,16 @@ htmlcov/
 
 # Temporary / Scratch
 *.tmp
+*.txt
+
+# Word Documents & PDFs
+*.docx
+*.pdf
+documents/*
+!documents/.gitkeep
+
+# Root scratch directory
+scratch/
+
+# Agent internal scratch & ephemeral notes
+.agent-info/scratch/

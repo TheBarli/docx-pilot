@@ -1,0 +1,273 @@
+# ==============================================================================
+# Academic ID Advanced Preset (academic-id-advanced.yaml)
+# ==============================================================================
+# Comprehensive Indonesian academic document formatting profile.
+# Extends standard academic-id rules with automated heading detection,
+# typographical casing normalization, whitespace hygiene, visible pagination,
+# and package-level file size optimization.
+# ==============================================================================
+
+preset_name: "academic-id-advanced"
+version: "1.0.0"
+description: "Advanced Indonesian academic document formatting pipeline with automated typography, structure hygiene, visible page breaks, and docx size optimization."
+
+# ------------------------------------------------------------------------------
+# 1. Page Layout & Margins
+# ------------------------------------------------------------------------------
+layout:
+  page_size: "a4"               # Standard A4 (210 x 297 mm)
+  orientation: "portrait"
+  top_cm: 4.0                   # Standard Indonesian Academic (4-4-3-3 cm)
+  bottom_cm: 3.0
+  left_cm: 4.0
+  right_cm: 3.0
+
+# ------------------------------------------------------------------------------
+# 2. Typography & Core Styles
+# ------------------------------------------------------------------------------
+styles:
+  Normal:
+    font: "Times New Roman"
+    size_pt: 12
+    line_spacing: 1.5           # 1.5 line spacing (360 dxa)
+    space_before_pt: 0
+    space_after_pt: 0
+    alignment: "both"           # Justified body text
+    color: "000000"             # Enforce solid black font
+  Heading 1:
+    font: "Times New Roman"
+    size_pt: 12
+    bold: true
+    line_spacing: 1.5
+    space_before_pt: 12         # 240 dxa
+    space_after_pt: 6           # 120 dxa
+    alignment: "left"           # Alphanumeric headings remain left-aligned
+    keep_next: true             # Prevent orphaned headings
+    color: "000000"
+  Heading 2:
+    font: "Times New Roman"
+    size_pt: 12
+    bold: true
+    line_spacing: 1.5
+    space_before_pt: 6          # 120 dxa
+    space_after_pt: 3           # 60 dxa
+    alignment: "left"
+    keep_next: true
+    color: "000000"
+
+# ------------------------------------------------------------------------------
+# 3. Table Formatting Standards
+# ------------------------------------------------------------------------------
+table:
+  border_sz: 4                  # 0.5 pt solid black borders
+  border_color: "000000"
+  header_shading: "F2F2F2"      # Clean neutral light-grey header fill
+  cant_split: true              # Prevent table rows from splitting across page breaks
+  repeat_header: true           # Repeat header row when table spans multiple pages
+  font_name: "Times New Roman"
+  font_size_pt: 11.0            # 11 pt readable table body
+
+# ------------------------------------------------------------------------------
+# 4. Document Protection Safeguards
+# ------------------------------------------------------------------------------
+protection:
+  preserve_cover_page: true     # Protect original cover page exactly as designed
+  cover_boundary_rules:
+    paragraph_index_end: 36     # Paragraphs 0 to 36 reserved for cover
+    end_marker_regex: "^(SEPTEMBER|OKTOBER|NOVEMBER|DESEMBER|JANUARI|FEBRUARI|MARET|APRIL|MEI|JUNI|JULI|AGUSTUS)\\s+\\d{4}$"
+    stop_before_first_heading: true  # Boundary stops immediately before first Heading 1 (e.g., 'A. FREE TEST')
+
+# ------------------------------------------------------------------------------
+# 5. Document Hygiene & Element Cleanup
+# ------------------------------------------------------------------------------
+hygiene:
+  remove_empty_paragraphs: true
+  remove_empty_tables: true
+  extract_single_image_tables: true   # Extract figures trapped inside single-cell tables
+  normalize_all_colors_black: true    # Fix faded or grey run colors to solid black #000000
+  remove_bold_from_normal: true       # Strip accidental bolding from body paragraphs
+
+# ------------------------------------------------------------------------------
+# 6. Heading Detection & Structural Classification
+# ------------------------------------------------------------------------------
+heading_detection:
+  heading_1:
+    pattern: "^[A-X]\\.\\s+"
+    keywords:
+      - "TEST"
+      - "URAIAN"
+      - "MENCOCOKKAN"
+      - "BENAR"
+      - "PILIHAN"
+      - "SIMULASI"
+      - "STUDI KASUS"
+      - "PRAKTIKUM"
+      - "MINI PROJECT"
+      - "UJI KOMPETENSI"
+      - "UJI KOMPETISI"
+      - "POST-TEST"
+      - "REFLEKSI"
+  heading_2:
+    detect_by_numbered_list_with_body: true   # Numbered items followed by descriptive paragraphs
+    prefix_patterns:
+      - "^Pertanyaan:\\s*"
+      - "^Pertimbangan Biaya"
+    section_targets: ["I", "J", "K", "O", "P", "Q", "R", "S", "U", "W"]
+    split_compound_questions: true             # Separate question title from answer body if merged
+    num_id_groupings: ["18", "36", "38", "40", "44", "46"]
+
+# ------------------------------------------------------------------------------
+# 7. Typography, Casing & Title Formatting
+# ------------------------------------------------------------------------------
+typography:
+  heading_1:
+    template: "{prefix} — {subtitle}"
+    separator: " — "            # Standard em-dash with spacing
+    prefix_casing: "UPPERCASE"  # e.g., 'P. MINI PROJECT 1'
+    subtitle_casing: "Title Case" # e.g., 'Desain Topologi Jaringan Kampus'
+    overrides:
+      - match: "^W\\.\\s*POST-TEST"
+        value: "W. POST-TEST"
+      - match: "^T\\.\\s*UJI KOMPETENSI 3"
+        value: "T. UJI KOMPETENSI 3 — Perhitungan Mesh"
+      - match: "^L\\.\\s*PRAKTIKUM 1"
+        value: "L. PRAKTIKUM 1 — Topologi Star dengan Cisco Packet Tracer"
+      - match: "^S\\.\\s*UJI KOMPET"
+        value: "S. UJI KOMPETENSI 2 — Perusahaan"
+      - match: "^R\\.\\s*UJI KOMPETENSI"
+        value: "R. UJI KOMPETENSI / SOAL INTEGRASI"
+      - match: "^D\\.\\s*SOAL BENAR"
+        value: "D. SOAL BENAR—SALAH"
+      - match: "^A\\.\\s*FREE TEST"
+        value: "A. FREE TEST — 10 Soal"
+
+  heading_2:
+    template: "{number}. {title}"
+    casing: "Title Case"
+    strip_trailing_punctuation: [".", "?", ":"]
+    strip_prefix_keywords: ["^Pertanyaan:\\s*"]
+    capitalize_last_word: true
+
+  # Technical acronyms that MUST always remain UPPERCASE
+  acronyms:
+    - "PC"
+    - "IP"
+    - "VLAN"
+    - "HSRP"
+    - "VRRP"
+    - "STP"
+    - "AP"
+    - "CBT"
+    - "ISP"
+    - "QoS"
+    - "SIAKAD"
+    - "WMN"
+    - "NIC"
+    - "SPOF"
+    - "LAN"
+    - "WLAN"
+    - "FO"
+    - "UTP"
+    - "LED"
+    - "UPS"
+
+  # Grammatical minor words to keep lowercase unless at start or end of title
+  minor_words:
+    id:
+      - "dan"
+      - "atau"
+      - "ke"
+      - "di"
+      - "dari"
+      - "pada"
+      - "untuk"
+      - "yang"
+      - "dengan"
+      - "terhadap"
+      - "dalam"
+      - "serta"
+      - "ala"
+      - "vs"
+      - "per"
+      - "sebagai"
+      - "oleh"
+      - "tentang"
+      - "jika"
+      - "apabila"
+      - "atas"
+      - "antar"
+      - "antara"
+    en:
+      - "of"
+      - "the"
+      - "and"
+      - "in"
+      - "on"
+      - "for"
+      - "to"
+      - "a"
+      - "an"
+
+  # Exact casing and spelling fixes for known irregular phrases
+  special_replacements:
+    - target: "(Gedung a,"
+      replacement: "(Gedung A,"
+    - target: "Antarroter"
+      replacement: "Antarrouter"
+    - target: "(ala Cisco)"
+      replacement: "(Ala Cisco)"
+    - target: "Level atas"
+      replacement: "Level Atas"
+
+# ------------------------------------------------------------------------------
+# 8. Whitespace & Text Hygiene
+# ------------------------------------------------------------------------------
+whitespace_hygiene:
+  collapse_multiple_spaces: true        # Replace redundant double spaces with single space
+  convert_bullet_spaces_to_tab: true    # Convert '•        ' to '•\t'
+  normalize_numbered_tabs: true         # Convert '1.  \t' to '1.\t'
+  remove_trailing_spaces: true          # Strip spaces before newline or paragraph end
+  remove_spaces_after_newline: true     # Strip leading spaces on indented multi-line bullets
+  preserve_ascii_diagrams:
+    enabled: true
+    diagram_markers:
+      - "───"
+      - "│"
+      - "┌"
+      - "└"
+      - "▼"
+      - "▲"
+
+# ------------------------------------------------------------------------------
+# 9. List & Paragraph Indentation
+# ------------------------------------------------------------------------------
+indentation:
+  normalize_excessive_indent: true      # Remove oversized left indents and extraneous leading tabs
+  multiple_choice:
+    keep_left_aligned: true             # Ensure multiple-choice lines (^[A-E]\.) remain flush left
+    pattern: "^[A-E]\\."
+
+# ------------------------------------------------------------------------------
+# 10. Pagination & Visible Page Breaks
+# ------------------------------------------------------------------------------
+pagination:
+  page_break_after_cover:
+    enabled: true
+    break_type: "manual_visible"        # Standard XML: <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+    position: "before_first_heading"    # Inserted immediately before 'A. FREE TEST'
+  page_break_before_headings:
+    enabled: false                      # Headings B through X flow continuously
+    remove_page_break_before_property: true   # Remove <w:pageBreakBefore/> from all paragraphs
+    remove_stray_manual_breaks: true          # Remove any rogue <w:br w:type="page"/> inside body
+
+# ------------------------------------------------------------------------------
+# 11. Package-Level File Size Optimization (Anti-Bloat)
+# ------------------------------------------------------------------------------
+package_optimization:
+  enabled: true
+  strip_embedded_fonts: true            # Remove word/fonts/*.odttf & word/_rels/fontTable.xml.rels
+  clean_font_table: true                # Strip embedRegular/Bold/Italic tags from word/fontTable.xml
+  clean_content_types: true             # Remove .odttf default extension from [Content_Types].xml
+  compression:
+    algorithm: "deflate"
+    level: 9                            # Maximum Deflate compression level
