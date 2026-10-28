@@ -6,9 +6,10 @@ A high-performance, token-efficient Model Context Protocol (MCP) server for insp
 
 ## Highlights
 
-* **Consolidated 4-Tool API**: Reduces prompt token overhead by ~65-70% compared to granular 14-tool designs, reserving maximum context bandwidth for actual document text.
+* **Consolidated 8-Tool Architecture**: Covers the full document manipulation lifecycle—batch generation, surgical DOM mutation, global find-and-replace, section-level page layout, ECMA-376 style configuration, table grid normalization, and automated structural hygiene.
 * **Strict 0-Based Indexing**: All paragraph (`[p:N]`), table (`[table:N]`), row, and column identifiers strictly use 0-based indexing to eliminate off-by-one hallucinations.
 * **Low-Level XML Mutations**: Leverages underlying `lxml`/`oxml` element nodes (`addprevious`, `addnext`, `parent.remove`) for in-place paragraph/table insertions and clean deletions without empty-node document corruption.
+* **ECMA-376 Schema Compliance**: Automated child sequence sorting (`STYLE_ORDER`, `PPR_ORDER`, `RPR_ORDER`) ensures manipulated documents open cleanly in Microsoft Word without "repaired content" warnings.
 * **Pinned Python 3.11 Runtime**: Guarantees pre-built C-wheels on Windows for `lxml` and `python-docx`.
 
 ---
@@ -17,22 +18,20 @@ A high-performance, token-efficient Model Context Protocol (MCP) server for insp
 
 ```text
 MsWord-ai-integration/
-├── .venv/                              # Isolated Python 3.11 environment
-├── .agent-info/                        # Persistent planning notes & documentation
 ├── .agents/
-│   ├── rules/                          # Collaborative problem resolution & info rules
-│   ├── mcp_config.json                 # Workspace MCP config
-│   └── plugins/
-│       └── word-docx/
-│           ├── plugin.json             # Workspace plugin manifest
-│           └── mcp_config.json         # Plugin MCP config
+│   ├── presets/                        # Formatting profiles (academic-id, clean-uniform)
+│   ├── rules/                          # Document styling orchestration rules
+│   └── mcp_config.json                 # Portable workspace MCP config
 ├── src/
 │   ├── __init__.py
-│   ├── server.py                       # FastMCP server entry point (4 tools)
-│   └── oxml_engine.py                  # Core python-docx + XML mutation engine
+│   ├── server.py                       # FastMCP server entry point (8 tools)
+│   └── oxml_engine.py                  # Core python-docx + OpenXML mutation engine
 ├── tests/
 │   ├── __init__.py
-│   └── test_mutations.py               # Unit tests verifying XML mutations & indexing
+│   ├── test_mutations.py               # Unit tests for core compose, read, and DOM mutations
+│   └── test_new_tools.py               # Unit tests for layout, styles, tables, and hygiene
+├── documents/                          # Working directory for .docx files (gitignored)
+├── demo.py                             # End-to-end demonstration script
 ├── .python-version                     # Pinned to 3.11
 ├── requirements.txt                    # Pinned dependencies
 └── README.md
@@ -105,22 +104,97 @@ Global or scoped text replacement across the document with run-level formatting 
   ) -> dict
   ```
 
+### 5. `set_page_layout`
+Modifies margins and page dimensions across **all** `<w:sectPr>` elements in `document.xml` (ensuring multi-section documents are uniformly sized).
+* **Signature**:
+  ```python
+  set_page_layout(
+      file_path: str,
+      top_cm: float = 2.54,
+      bottom_cm: float = 2.54,
+      left_cm: float = 2.54,
+      right_cm: float = 2.54,
+      page_size: Literal["letter", "a4", "legal"] = "letter",
+      orientation: Literal["portrait", "landscape"] = "portrait"
+  ) -> dict
+  ```
+
+### 6. `update_styles`
+Directly edits `word/styles.xml` to configure font families, font sizes, line spacing, space before/after, colors, and `keepNext` rules. Children are reordered according to the ECMA-376 sequence specification.
+* **Signature**:
+  ```python
+  update_styles(
+      file_path: str,
+      styles_config: dict[str, dict]
+  ) -> dict
+  ```
+
+### 7. `format_table_grid`
+Standardizes borders, row pagination properties, header fills, and cell margins across tables.
+* **Signature**:
+  ```python
+  format_table_grid(
+      file_path: str,
+      table_indices: Optional[list[int]] = None,  # None targets all tables
+      border_sz: int = 4,                         # 1/8 pt units (4 = 0.5 pt)
+      border_color: str = "000000",
+      header_shading: Optional[str] = "F2F2F2",
+      cant_split: bool = True,                    # Prevents split across page breaks
+      repeat_header: bool = True,                 # Repeats header on multi-page tables
+      font_name: Optional[str] = "Times New Roman",
+      font_size_pt: Optional[float] = 11.0
+  ) -> dict
+  ```
+
+### 8. `clean_structure`
+Performs automated hygiene passes to eliminate structural bloat:
+* Strips trailing empty paragraphs (`<w:p>`) that contain no text, drawings, or breaks.
+* Deletes empty tables with no text or images.
+* Extracts single images wrapped in tables and converts them to centered standalone paragraphs.
+* Caps consecutive page breaks.
+* Optionally forces all text color declarations in `document.xml` to pure black (`#000000`).
+* **Signature**:
+  ```python
+  clean_structure(
+      file_path: str,
+      remove_empty_paragraphs: bool = True,
+      remove_empty_tables: bool = True,
+      extract_single_image_tables: bool = True,
+      max_consecutive_breaks: int = 1,
+      normalize_all_colors_black: bool = False
+  ) -> dict
+  ```
+
+---
+
+## Formatting Presets & Agent Automation
+
+The repository includes pre-built document styling presets under `.agents/presets/`:
+* **`academic-id.yaml`**: Standard Indonesian academic style (A4, 4-4-3-3 cm margins, Times New Roman 12pt, 1.5 line spacing, 0.5pt table borders).
+* **`academic-id-advanced.yaml`**: Extended academic profile with fine-grained heading hierarchies (H1–H5), list indentation, and strict pagination.
+* **`clean-uniform.yaml`**: General-purpose business profile (Letter/A4, uniform 2.54 cm margins, Calibri typography).
+
+### Sequential Pipeline Order
+When applying a preset, execute tools in this sequence:
+1. `set_page_layout`
+2. `update_styles`
+3. `format_table_grid`
+4. `clean_structure`
+5. Verify via `read_document(file_path, mode="metadata")`
+
 ---
 
 ## Antigravity IDE Configuration
 
-### Option A: Workspace Plugin (Automatic)
-The project includes `.agents/plugins/word-docx/mcp_config.json` and `.agents/mcp_config.json`. When opening this repository in Antigravity IDE, the server is automatically discovered.
-
-### Option B: Global Configuration
-To make this server accessible across all workspaces in Antigravity IDE, add the following entry to `~/.gemini/config/mcp_config.json`:
+### Option A: Workspace MCP Config (Automatic)
+The project includes `.agents/mcp_config.json`. When opening this repository in Antigravity IDE, the server is automatically discovered:
 
 ```json
 {
   "mcpServers": {
     "word-docx": {
-      "command": "c:/Users/levine/Documents/Github/MsWord-ai-integration/.venv/Scripts/python.exe",
-      "args": ["c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py"],
+      "command": "python",
+      "args": ["src/server.py"],
       "env": {
         "PYTHONUNBUFFERED": "1"
       }
@@ -129,12 +203,37 @@ To make this server accessible across all workspaces in Antigravity IDE, add the
 }
 ```
 
+### Option B: Global Configuration
+To make this server accessible across all workspaces in Antigravity IDE, add an entry to `~/.gemini/config/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "word-docx": {
+      "command": "<repo-path>/.venv/Scripts/python.exe",
+      "args": ["<repo-path>/src/server.py"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
+```
+
+> Replace `<repo-path>` with the absolute path to where you cloned this repository.
+
 ---
 
 ## Testing & Verification
 
-Run the test suite inside `.venv`:
+Run the comprehensive unit test suite inside `.venv`:
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/
+.venv\Scripts\python.exe -m pytest tests/ -v
+```
+
+Run the end-to-end demo:
+
+```powershell
+.venv\Scripts\python.exe demo.py
 ```

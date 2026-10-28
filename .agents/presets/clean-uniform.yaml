@@ -1,0 +1,47 @@
+layout:
+  page_size: "A4"
+  orientation: "portrait"
+
+styles:
+  Normal:
+    font: "Times New Roman"
+    size_pt: 12
+    line_spacing: 1.5
+    space_after_pt: 0
+    alignment: "both"
+    color: "000000"
+  Heading 1:
+    font: "Times New Roman"
+    size_pt: 12
+    bold: true
+    line_spacing: 1.5
+    space_before_pt: 0
+    space_after_pt: 0
+    alignment: "left"
+    keep_next: true
+    color: "000000"
+  Heading 2:
+    font: "Times New Roman"
+    size_pt: 12
+    bold: true
+    line_spacing: 1.5
+    space_before_pt: 0
+    space_after_pt: 0
+    alignment: "left"
+    keep_next: true
+    color: "000000"
+
+table:
+  border_sz: 4
+  border_color: "000000"
+  header_shading: "F2F2F2"
+  cant_split: true
+  repeat_header: true
+  font_name: "Times New Roman"
+  font_size_pt: 11.0
+
+hygiene:
+  remove_empty_paragraphs: true
+  remove_empty_tables: true
+  extract_single_image_tables: true
+  normalize_all_colors_black: true
