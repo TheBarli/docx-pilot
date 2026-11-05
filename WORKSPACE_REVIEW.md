@@ -4,7 +4,7 @@
 **Current Branch:** `feat/live-word-backend`  
 **Base Tracking:** `origin/refactor/mcp-and-directory-cleanup` (Default: `origin/master`)  
 **Environment:** Python 3.11.9 (`.venv`), FastMCP 4.0+, Windows COM (`pywin32` 312)  
-**Status:** **Phase 0 & Phase 1 Spike Complete | 38 Passed, 6 Skipped Tests | Working Tree Clean**
+**Status:** **Phase 0 & Phase 1 Spike Complete | 44 Passed, 0 Failed Tests (100% Green) | Working Tree Clean**
 
 ---
 
@@ -110,7 +110,7 @@ Tool Invocation (file_path)
 ## 5. Test Suite & Verification Metrics
 
 ```text
-======================== 38 passed, 6 skipped in 2.99s ========================
+============================= 44 passed in 12.59s =============================
 ```
 
 | Suite | File | Tests | Status | Scope |
@@ -118,7 +118,7 @@ Tool Invocation (file_path)
 | Core Headless | [`tests/test_mutations.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_mutations.py) | 3 | **PASSED** | Batch composition, XML paragraph mutations, find-and-replace |
 | Advanced Headless | [`tests/test_new_tools.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_new_tools.py) | 26 | **PASSED** | Path normalization, page layout, style order, tables, hygiene |
 | COM Worker | [`tests/test_live_worker.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_worker.py) | 9 | **PASSED** | Timeouts, poisoned state, thread preservation, lock detection |
-| Live Integration | [`tests/test_live_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_engine.py) | 6 | **SKIPPED\*** | Live open/close detection, outline, mutations, undo, find-replace |
+| Live Integration | [`tests/test_live_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_engine.py) | 6 | **PASSED** | Live open/close detection, outline, mutations, undo, find-replace |
 
 *\*Automatically skipped when Microsoft Word is closed; fully active when Word is running.*
 
@@ -155,3 +155,4 @@ Tool Invocation (file_path)
 4. **Phase 4 (Docs & Rule Orchestration):**
    - Activate `.agents/rules/live-word-mode.md` and `live-word-editing` skill.
    - Prepare clean pull request to `master`.
+

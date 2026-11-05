@@ -164,7 +164,14 @@ class ComWorker:
 
     def _worker_loop(self) -> None:
         """Thread worker loop running CoInitialize/CoUninitialize."""
-        if HAS_COM:
+        if HAS_COM and sys.platform == "win32":
+            try:
+                import win32service
+                import win32con
+                h_default = win32service.OpenDesktop("Default", 0, False, win32con.MAXIMUM_ALLOWED)
+                h_default.SetThreadDesktop()
+            except Exception:
+                pass
             try:
                 pythoncom.CoInitialize()
             except Exception:

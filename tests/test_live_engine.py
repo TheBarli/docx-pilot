@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Generator
+from typing import Any, Generator
 import pytest
 
 from src.oxml_engine import DocxEngine
@@ -30,9 +30,14 @@ def _is_word_active() -> bool:
     """Check if Microsoft Word is active and accessible via COM."""
     if not HAS_COM:
         return False
+    def _check():
+        try:
+            app = win32com.client.GetActiveObject("Word.Application")
+            return app is not None
+        except Exception:
+            return False
     try:
-        app = win32com.client.GetActiveObject("Word.Application")
-        return app is not None
+        return bool(com_worker.run(_check, timeout=3.0))
     except Exception:
         return False
 
@@ -97,7 +102,9 @@ def test_detection_open_and_closed(live_doc):
     # Detection when open
     found = find_open_document(test_file)
     assert found is not None
-    assert paths_match(found.FullName, test_file)
+    # Access COM property inside worker thread per Rule C9
+    found_full_name = com_worker.run(lambda: found.FullName)
+    assert paths_match(found_full_name, test_file)
 
     backend, doc_ref = pick_backend(test_file, tool_name="read_document", is_mutation=False)
     assert backend == "live"
@@ -105,7 +112,7 @@ def test_detection_open_and_closed(live_doc):
 
     # Path variant matching (uppercase vs lowercase)
     upper_path = str(test_file).upper()
-    assert paths_match(upper_path, found.FullName)
+    assert paths_match(upper_path, found_full_name)
 
 
 def test_live_read_outline_and_full(live_doc):
