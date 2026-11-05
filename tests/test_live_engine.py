@@ -47,13 +47,11 @@ pytestmark = pytest.mark.live
 
 @pytest.fixture
 def live_doc(tmp_path: Path) -> Generator[tuple[Path, Any], None, None]:
-    """Create documents/live_test.docx, open in running Word, and close at teardown."""
+    """Create isolated test doc, open in running Word, and close at teardown."""
     if not _is_word_active():
         pytest.skip("Microsoft Word desktop instance is not currently running via COM.")
 
-    docs_dir = Path("documents")
-    docs_dir.mkdir(exist_ok=True)
-    test_file = (docs_dir / "live_test.docx").resolve()
+    test_file = (tmp_path / "live_test.docx").resolve()
 
     # Initial composition via DocxEngine (headless)
     actions = [
@@ -215,3 +213,144 @@ def test_find_and_replace_max_length_validation(live_doc):
             find_text="x" * 256,
             replace_text="replacement",
         )
+
+
+def test_live_read_table(live_doc):
+    test_file, com_doc = live_doc
+    res = LiveWordEngine.read_document(com_doc, test_file, mode="table", table_index=0)
+    assert isinstance(res, dict)
+    assert res["table_index"] == 0
+    assert res["rows_count"] == 3
+    assert res["columns_count"] == 2
+    assert res["matrix"][0] == ["Metric", "Value"]
+    assert res["matrix"][1] == ["Memory", "64MB"]
+    assert "| Metric | Value |" in res["markdown"]
+
+
+def test_live_set_page_layout(live_doc):
+    test_file, com_doc = live_doc
+    res = LiveWordEngine.set_page_layout(
+        com_doc,
+        test_file,
+        top_cm=3.0,
+        bottom_cm=3.0,
+        left_cm=2.0,
+        right_cm=2.0,
+        page_size="a4",
+        orientation="landscape",
+    )
+    assert res["status"] == "success"
+    assert res["page_size"] == "a4"
+    assert res["orientation"] == "landscape"
+
+    # Verify directly via COM worker
+    def _verify():
+        ps = com_doc.Sections.Item(1).PageSetup
+        return ps.Orientation, round(ps.TopMargin)
+
+    orient, top_pt = com_worker.run(_verify)
+    assert orient == 1  # wdOrientLandscape
+    assert abs(top_pt - round(3.0 * 72.0 / 2.54)) <= 1
+
+
+def test_live_update_styles(live_doc):
+    test_file, com_doc = live_doc
+    res = LiveWordEngine.update_styles(
+        com_doc,
+        test_file,
+        styles_config={
+            "Normal": {
+                "font": "Arial",
+                "size_pt": 12.0,
+                "bold": True,
+                "color": "FF0000",
+                "space_after_pt": 6.0,
+            }
+        },
+    )
+    assert res["status"] == "success"
+    assert "Normal" in res["updated_styles"]
+
+    def _verify():
+        st = com_doc.Styles("Normal")
+        return st.Font.Name, st.Font.Size, st.Font.Bold
+
+    name, size, bold = com_worker.run(_verify)
+    assert name == "Arial"
+    assert size == 12.0
+    assert bold == -1 or bold is True  # wdToggle / True in COM
+
+
+def test_live_compose_document(live_doc):
+    test_file, com_doc = live_doc
+    actions = [
+        {"type": "heading", "text": "Appended Live Heading", "level": 2},
+        {"type": "paragraph", "text": "Appended Live Body text", "bold": False},
+    ]
+    res = LiveWordEngine.compose_document(com_doc, test_file, actions=actions)
+    assert res["status"] == "success"
+    assert res["total_actions"] == 2
+
+    full = LiveWordEngine.read_document(com_doc, test_file, mode="full")
+    assert "Appended Live Heading" in full
+    assert "Appended Live Body text" in full
+
+
+def test_live_format_table_grid(live_doc):
+    test_file, com_doc = live_doc
+    res = LiveWordEngine.format_table_grid(
+        com_doc,
+        test_file,
+        table_indices=[0],
+        border_sz=4,
+        border_color="000000",
+        header_shading="E0E0E0",
+        cant_split=True,
+        repeat_header=True,
+    )
+    assert res["status"] == "success"
+    assert res["tables_formatted"] == 1
+
+    def _verify():
+        tbl = com_doc.Tables.Item(1)
+        r1 = tbl.Rows.Item(1)
+        return r1.HeadingFormat, tbl.Rows.AllowBreakAcrossPages
+
+    h_format, allow_break = com_worker.run(_verify)
+    assert h_format == -1  # True
+    assert allow_break == 0  # False
+
+
+def test_live_clean_structure_dry_run_and_execution(live_doc):
+    test_file, com_doc = live_doc
+
+    # Add an empty paragraph to the document
+    def _add_empty():
+        end_rng = com_doc.Range(com_doc.Content.End - 1, com_doc.Content.End - 1)
+        p = com_doc.Paragraphs.Add(Range=end_rng)
+        p.Range.Text = "\n"
+
+    com_worker.run(_add_empty)
+
+    # 1. Test dry_run: must report >= 1 empty paragraph and not mutate
+    res_dry = LiveWordEngine.clean_structure(
+        com_doc,
+        test_file,
+        remove_empty_paragraphs=True,
+        dry_run=True,
+    )
+    assert res_dry["status"] == "success"
+    assert res_dry["dry_run"] is True
+    assert res_dry["empty_paragraphs_removed"] >= 1
+
+    # 2. Test actual removal: must remove it
+    res_real = LiveWordEngine.clean_structure(
+        com_doc,
+        test_file,
+        remove_empty_paragraphs=True,
+        dry_run=False,
+    )
+    assert res_real["status"] == "success"
+    assert res_real["dry_run"] is False
+    assert res_real["empty_paragraphs_removed"] >= 1
+

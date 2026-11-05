@@ -51,3 +51,4 @@ The core engine and routing are verified and fast. The project is ready for Phas
 - `format_table_grid`
 - `clean_structure` (with `dry_run: bool = False`)
 - `read_document` `table` mode
+

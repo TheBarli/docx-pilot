@@ -981,6 +981,7 @@ class DocxEngine:
         extract_single_image_tables: bool = True,
         max_consecutive_breaks: int = 1,
         normalize_all_colors_black: bool = False,
+        dry_run: bool = False,
     ) -> Dict[str, Any]:
         """Automated hygiene primitive that strips trailing empty <w:p> nodes, removes empty tables with 0 text/drawings, and purges rogue page breaks."""
         path = normalize_path(file_path)
@@ -1010,29 +1011,30 @@ class DocxEngine:
                     total_images = len(drawings) + len(picts)
 
                     if remove_empty_tables and not full_text and total_images == 0:
-                        body.remove(tbl)
+                        if not dry_run:
+                            body.remove(tbl)
                         empty_tables_removed += 1
                         continue
 
                     if extract_single_image_tables and total_images > 0 and len(full_text) < 15:
-                        tbl_parent = tbl.getparent()
-                        tbl_pos = tbl_parent.index(tbl)
-                        for d in drawings:
-                            p_new = etree.Element(f"{{{W_NS}}}p")
-                            pPr_new = etree.SubElement(p_new, f"{{{W_NS}}}pPr")
-                            jc_new = etree.SubElement(pPr_new, f"{{{W_NS}}}jc")
-                            jc_new.attrib[f"{{{W_NS}}}val"] = "center"
-                            etree.SubElement(pPr_new, f"{{{W_NS}}}keepNext")
-                            r_new = etree.SubElement(p_new, f"{{{W_NS}}}r")
-                            d_parent = d.getparent()
-                            if d_parent is not None:
-                                d_parent.remove(d)
-                            r_new.append(d)
-                            tbl_parent.insert(tbl_pos, p_new)
-                            tbl_pos += 1
-                            images_extracted += 1
-
-                        tbl_parent.remove(tbl)
+                        if not dry_run:
+                            tbl_parent = tbl.getparent()
+                            tbl_pos = tbl_parent.index(tbl)
+                            for d in drawings:
+                                p_new = etree.Element(f"{{{W_NS}}}p")
+                                pPr_new = etree.SubElement(p_new, f"{{{W_NS}}}pPr")
+                                jc_new = etree.SubElement(pPr_new, f"{{{W_NS}}}jc")
+                                jc_new.attrib[f"{{{W_NS}}}val"] = "center"
+                                etree.SubElement(pPr_new, f"{{{W_NS}}}keepNext")
+                                r_new = etree.SubElement(p_new, f"{{{W_NS}}}r")
+                                d_parent = d.getparent()
+                                if d_parent is not None:
+                                    d_parent.remove(d)
+                                r_new.append(d)
+                                tbl_parent.insert(tbl_pos, p_new)
+                                tbl_pos += 1
+                            tbl_parent.remove(tbl)
+                        images_extracted += 1
 
             # 2. Page breaks hygiene
             if max_consecutive_breaks is not None:
@@ -1040,7 +1042,8 @@ class DocxEngine:
                     brs = p.findall(".//w:br[@w:type='page']", namespaces={"w": W_NS})
                     if len(brs) > max_consecutive_breaks:
                         for br in brs[max_consecutive_breaks:]:
-                            br.getparent().remove(br)
+                            if not dry_run:
+                                br.getparent().remove(br)
                             page_breaks_cleaned += 1
 
             # 3. Empty paragraphs cleanup
@@ -1054,13 +1057,25 @@ class DocxEngine:
                         brs = child.findall(".//w:br[@w:type='page']", namespaces={"w": W_NS})
                         sect_prs = child.findall(".//w:sectPr", namespaces={"w": W_NS})
                         if not txt and len(drawings) == 0 and len(picts) == 0 and len(brs) == 0 and len(sect_prs) == 0:
-                            body.remove(child)
+                            if not dry_run:
+                                body.remove(child)
                             empty_paragraphs_removed += 1
 
             # 4. Color normalization
-            if normalize_all_colors_black:
+            if normalize_all_colors_black and not dry_run:
                 for c in doc_xml.findall(".//w:color", namespaces={"w": W_NS}):
                     c.attrib[f"{{{W_NS}}}val"] = "000000"
+
+            if dry_run:
+                return {
+                    "status": "success",
+                    "file_path": str(path),
+                    "empty_tables_removed": empty_tables_removed,
+                    "images_extracted_from_tables": images_extracted,
+                    "empty_paragraphs_removed": empty_paragraphs_removed,
+                    "page_breaks_cleaned": page_breaks_cleaned,
+                    "dry_run": True,
+                }
 
             tmp_path = path.with_suffix(".tmp")
             with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
@@ -1081,5 +1096,6 @@ class DocxEngine:
             "images_extracted_from_tables": images_extracted,
             "empty_paragraphs_removed": empty_paragraphs_removed,
             "page_breaks_cleaned": page_breaks_cleaned,
+            "dry_run": False,
         }
 

@@ -39,3 +39,4 @@ Testing confirmed that even if a tool performs multiple paragraph insertions, de
   2. Compute visible body indices as `[i for i in range(1, total + 1) if i not in table_paragraphs]`.
   3. Outline extraction queries `doc.GetCrossReferenceItems(1)` (wdRefTypeHeading) and searches matches forward with `rng.Find`, resolving paragraph indices via `doc.Range(0, rng.Paragraphs.Item(1).Range.End).Paragraphs.Count`.
   4. Execution time dropped from > 20s to **0.433s**, exceeding the < 2.0s requirement.
+

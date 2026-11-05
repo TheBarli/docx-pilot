@@ -120,7 +120,30 @@ When formatting documents using presets, the agent follows the pipeline defined 
 
 ---
 
-## 6. Antigravity IDE Integration & Local Setup
+## 6. Dual Backend Engine Architecture (Live & Headless)
+
+The server supports transparent dual-backend operation:
+
+1. **Headless Engine ([`src/oxml_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/oxml_engine.py))**:
+   - Operates on static files on disk via `python-docx` and `lxml`.
+   - Low-level XML tree mutations with strict ECMA-376 schema ordering.
+   - Non-destructive `dry_run: bool = False` for structural hygiene.
+
+2. **Live Microsoft Word Engine ([`src/live_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/live_engine.py))**:
+   - Automatically detects if the document is active in Microsoft Word using `GetActiveObject("Word.Application")`.
+   - Interacts live via Windows COM with zero external window spawning (Rule C4).
+   - Groups multi-step actions inside Word's `Application.UndoRecord` so **every tool call can be rolled back with a single `Ctrl + Z`** (Rule C5).
+   - Visual Track Changes for mutations and text replacements.
+   - Dedicated single-threaded worker (`ComWorker`) with 20s timeout and poisoned-state protection.
+   - Re-entrancy protection and Windows desktop station bridging (`SetThreadDesktop("Default")`).
+
+3. **Automatic Safety Backups**:
+   - Before any mutating tool execution, a timestamped copy is saved to `documents/.backups/`.
+   - Automatically rotates and retains the latest `BACKUP_KEEP = 20` copies per file stem.
+
+---
+
+## 7. Antigravity IDE Integration & Local Setup
 
 ### Workspace Configuration
 The workspace is pre-configured with [`.agents/mcp_config.json`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/mcp_config.json):
@@ -139,41 +162,45 @@ The workspace is pre-configured with [`.agents/mcp_config.json`](file:///c:/User
 ```
 When opened in Antigravity IDE, the `word-docx` server is automatically recognized and loaded into the agent's toolset.
 
+### Rules & Skills
+- **Rule [`live-word-mode`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/rules/live-word-mode.md)**: Governs live vs headless tool invariants, outline reuse, and safety constraints.
+- **Rule [`document-styling`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/rules/document-styling.md)**: Enforces the 5-step preset styling pipeline.
+- **Skill [`live-word-editing`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/skills/live-word-editing/SKILL.md)**: Procedure and error catalog lookup for interactive live editing.
+
 ### Python Environment
-- Python version is pinned to **3.11.9** via [`.python-version`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.python-version). This guarantees precompiled Windows binary wheels for C-extensions (`lxml`, `python-docx`) without needing local C++ build tools.
-- Dependencies are listed in [`requirements.txt`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/requirements.txt):
+- Python version is pinned to **3.11.9** via [`.python-version`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.python-version).
+- Production dependencies in [`requirements.txt`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/requirements.txt):
   - `fastmcp>=4.0.0`
   - `python-docx>=1.2.0`
   - `pydantic>=2.0.0`
   - `lxml>=6.1.0`
+  - `pywin32>=306; sys_platform == 'win32'`
   - `pytest>=9.0.0`
 
 ---
 
-## 7. Testing & Quality Assurance
+## 8. Testing & Quality Assurance
 
-The codebase maintains 100% passing test coverage across 29 automated test cases:
+The codebase maintains 100% passing test coverage across 55 automated test cases:
 
 ```powershell
+# Run headless tests (no Word required)
+.venv\Scripts\python.exe -m pytest -m "not live" -v
+
+# Run full test suite including live COM tests (with Word open)
 .venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
 ### Test Suites:
-- **[`tests/test_mutations.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_mutations.py)**:
-  - Batch document creation and multi-mode reading (`outline`, `full`, `table`, `metadata`).
-  - Low-level XML paragraph mutations (`insert_before`, `insert_after`, `replace`, `delete`).
-  - Scoped find-and-replace in body text and table cells.
-- **[`tests/test_new_tools.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_new_tools.py)**:
-  - `normalize_path` resolution across absolute, CWD-relative, and project-root paths.
-  - Multi-section page layout and margin twip accuracy (including portrait/landscape swapping).
-  - ECMA-376 element sequence validation for `update_styles`.
-  - Table grid border sizing, shading, and `cantSplit`/`tblHeader` injection.
-  - Structural cleanup (empty paragraph removal, empty table removal, page break capping, color normalization).
-  - Round-trip file reopening verification using `python-docx` as a proxy for Word parser validation.
+- **[`tests/test_mutations.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_mutations.py)**: Headless batch creation, reading, and XML paragraph mutations.
+- **[`tests/test_new_tools.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_new_tools.py)**: Headless layout, styles, table formatting, and structural hygiene with dry_run.
+- **[`tests/test_live_worker.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_worker.py)**: Single-threaded COM worker isolation, timeouts, poisoned state, path matching, and lock file detection.
+- **[`tests/test_live_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_engine.py)**: 12 live COM tests verifying all 8 tools, single-step UndoRecord, and Track Changes.
+- **[`tests/test_gate_2_parity.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_gate_2_parity.py)**: Full end-to-end parity test executing `academic-id.yaml` styling pipeline across both backends on identical input.
 
 ---
 
-## 8. Practical Demo
+## 9. Practical Demo
 
 To see the server and engine in action end-to-end, execute [`demo.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/demo.py):
 ```powershell
