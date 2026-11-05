@@ -494,23 +494,32 @@ WD_OUTLINE_LEVEL_BODY = 10
 
 
 def _build_visible_map(doc: Any) -> Dict[str, Any]:
-    """Calculate 0-based visible body paragraphs, excluding tables and full deletions."""
-    paragraphs = doc.Paragraphs
-    count = paragraphs.Count
-    visible_indices: List[int] = []
+    """Calculate 0-based visible body paragraphs, excluding tables and full deletions.
 
-    # Filter out table paragraphs & collect body paragraph indices
-    for i in range(1, count + 1):
-        try:
-            p = paragraphs.Item(i)
-            rng = p.Range
-            # Exclude paragraphs inside tables
-            if rng.Information(WD_WITHIN_TABLE):
-                continue
-            visible_indices.append(i)
-        except Exception:
-            continue
+    Optimized for bulk speed: queries doc.Tables ranges instead of calling
+    rng.Information(WD_WITHIN_TABLE) per paragraph, reducing COM round-trips from O(N) to O(T).
+    """
+    total_p = doc.Paragraphs.Count
+    if total_p == 0:
+        return {"indices": [], "deleted_spans": {}}
 
+    table_p_set = set()
+    try:
+        tables = doc.Tables
+        tbl_count = tables.Count
+        for idx in range(1, tbl_count + 1):
+            try:
+                tr = tables.Item(idx).Range
+                p_start = doc.Range(0, tr.Start).Paragraphs.Count + 1
+                cnt = tr.Paragraphs.Count
+                for p_i in range(p_start, p_start + cnt):
+                    table_p_set.add(p_i)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    visible_indices = [i for i in range(1, total_p + 1) if i not in table_p_set]
     return {
         "indices": visible_indices,
         "deleted_spans": {},
@@ -591,13 +600,35 @@ class LiveWordEngine:
                     "",
                     "### Structural Elements (0-based indices):",
                 ]
-                for zero_idx, com_i in enumerate(body_indices):
-                    p = doc.Paragraphs.Item(com_i)
-                    style_name = str(p.Style.NameLocal)
-                    outline_lvl = getattr(p, "OutlineLevel", WD_OUTLINE_LEVEL_BODY)
-                    if outline_lvl < WD_OUTLINE_LEVEL_BODY or "heading" in style_name.lower():
-                        txt = p.Range.Text.rstrip("\r\n\x07")
-                        lines.append(f"- `[p:{zero_idx}]` **({style_name})**: \"{txt[:80]}\"")
+                try:
+                    items = doc.GetCrossReferenceItems(1)  # wdRefTypeHeading = 1
+                except Exception:
+                    items = ()
+
+                if items:
+                    com_to_zero = {com_i: idx for idx, com_i in enumerate(body_indices)}
+                    rng = doc.Content
+                    f = rng.Find
+                    for heading_text in items:
+                        clean = heading_text.strip()
+                        if not clean:
+                            continue
+                        f.ClearFormatting()
+                        if f.Execute(FindText=clean, Forward=True):
+                            p_obj = rng.Paragraphs.Item(1)
+                            com_i = doc.Range(0, p_obj.Range.End).Paragraphs.Count
+                            zero_idx = com_to_zero.get(com_i, 0)
+                            style_name = str(p_obj.Style.NameLocal)
+                            lines.append(f"- `[p:{zero_idx}]` **({style_name})**: \"{clean[:80]}\"")
+                            rng.Collapse(0)
+                else:
+                    for zero_idx, com_i in enumerate(body_indices):
+                        p = doc.Paragraphs.Item(com_i)
+                        style_name = str(p.Style.NameLocal)
+                        outline_lvl = getattr(p, "OutlineLevel", WD_OUTLINE_LEVEL_BODY)
+                        if outline_lvl < WD_OUTLINE_LEVEL_BODY or "heading" in style_name.lower():
+                            txt = p.Range.Text.rstrip("\r\n\x07")
+                            lines.append(f"- `[p:{zero_idx}]` **({style_name})**: \"{txt[:80]}\"")
 
                 for t_idx in range(1, num_tables + 1):
                     tbl = tables.Item(t_idx)
