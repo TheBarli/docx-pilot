@@ -123,3 +123,4 @@ class TestPickBackendNoWord:
         # Reading tool should fall back to headless
         backend, _ = pick_backend(doc, tool_name="read_document", is_mutation=False)
         assert backend == "headless"
+

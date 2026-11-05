@@ -43,3 +43,4 @@
 - [x] `.gitignore` updated with explicit entries for `documents/.backups/` and `documents/live_test.docx`.
 - [x] `src/live_engine.py` created with `ComWorker`, `pick_backend`, `_norm`, `paths_match`, `has_word_lock_file`, and undo/track wrappers.
 - [x] `tests/test_live_worker.py` added with 9 comprehensive unit tests.
+

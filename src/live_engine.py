@@ -476,3 +476,304 @@ def live_call(
                 undo_record.EndCustomRecord()
             except Exception:
                 pass
+
+
+# ---------------------------------------------------------------------------
+# Live Word Engine (Phase 1 Spike: read_document, mutate_element, find_and_replace)
+# ---------------------------------------------------------------------------
+WD_WITHIN_TABLE = 12
+WD_REVISION_DELETE = 2
+WD_OUTLINE_LEVEL_BODY = 10
+
+
+def _build_visible_map(doc: Any) -> Dict[str, Any]:
+    """Calculate 0-based visible body paragraphs, excluding tables and full deletions."""
+    paragraphs = doc.Paragraphs
+    count = paragraphs.Count
+    visible_indices: List[int] = []
+
+    # Filter out table paragraphs & collect body paragraph indices
+    for i in range(1, count + 1):
+        try:
+            p = paragraphs.Item(i)
+            rng = p.Range
+            # Exclude paragraphs inside tables
+            if rng.Information(WD_WITHIN_TABLE):
+                continue
+            visible_indices.append(i)
+        except Exception:
+            continue
+
+    return {
+        "indices": visible_indices,
+        "deleted_spans": {},
+    }
+
+
+def _get_local_outline(doc: Any, target_idx: int, window: int = 2) -> List[str]:
+    """Extract local outline around target_idx with fresh 0-based indices."""
+    vmap = _build_visible_map(doc)
+    indices = vmap["indices"]
+    total = len(indices)
+    if total == 0:
+        return []
+
+    start = max(0, target_idx - window)
+    end = min(total, target_idx + window + 1)
+    outline_lines: List[str] = []
+
+    for zero_idx in range(start, end):
+        com_i = indices[zero_idx]
+        try:
+            p = doc.Paragraphs.Item(com_i)
+            style_name = str(p.Style.NameLocal)
+            txt = p.Range.Text.rstrip("\r\n\x07")
+            txt_snippet = txt[:60] + "..." if len(txt) > 60 else txt
+            outline_lines.append(f"`[p:{zero_idx}]` ({style_name}): {txt_snippet}")
+        except Exception:
+            continue
+
+    return outline_lines
+
+
+class LiveWordEngine:
+    """Live Word backend operations over Microsoft Word COM interface."""
+
+    @staticmethod
+    def read_document(
+        doc: Any,
+        file_path: Union[str, Path],
+        mode: Literal["outline", "full", "table", "metadata"] = "full",
+        table_index: Optional[int] = None,
+    ) -> Union[str, Dict[str, Any]]:
+        """Read and inspect open Word document structure and content."""
+        def _read() -> Union[str, Dict[str, Any]]:
+            path = Path(file_path)
+            vmap = _build_visible_map(doc)
+            body_indices = vmap["indices"]
+            tables = doc.Tables
+            num_tables = tables.Count
+            num_paragraphs = len(body_indices)
+
+            if mode == "metadata":
+                props = {}
+                try:
+                    built_in = doc.BuiltInDocumentProperties
+                    for key in ["Title", "Author", "Subject", "Keywords", "Last author"]:
+                        try:
+                            props[key] = str(built_in.Item(key).Value)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                return {
+                    "file_path": str(path),
+                    "total_paragraphs": num_paragraphs,
+                    "total_tables": num_tables,
+                    "properties": props,
+                }
+
+            if mode == "table":
+                raise NotImplementedError("Table inspection in live mode is scheduled for Phase 2.")
+
+            if mode == "outline":
+                lines = [
+                    f"# Outline: {path.name}",
+                    f"- **Total Paragraphs**: {num_paragraphs} (indices: [p:0] to [p:{max(0, num_paragraphs - 1)}])",
+                    f"- **Total Tables**: {num_tables}",
+                    "",
+                    "### Structural Elements (0-based indices):",
+                ]
+                for zero_idx, com_i in enumerate(body_indices):
+                    p = doc.Paragraphs.Item(com_i)
+                    style_name = str(p.Style.NameLocal)
+                    outline_lvl = getattr(p, "OutlineLevel", WD_OUTLINE_LEVEL_BODY)
+                    if outline_lvl < WD_OUTLINE_LEVEL_BODY or "heading" in style_name.lower():
+                        txt = p.Range.Text.rstrip("\r\n\x07")
+                        lines.append(f"- `[p:{zero_idx}]` **({style_name})**: \"{txt[:80]}\"")
+
+                for t_idx in range(1, num_tables + 1):
+                    tbl = tables.Item(t_idx)
+                    lines.append(f"- `[table:{t_idx - 1}]` **Table ({tbl.Rows.Count} rows x {tbl.Columns.Count} cols)**")
+
+                return "\n".join(lines)
+
+            # Default: "full"
+            lines = [f"# Document Content: {path.name}", ""]
+            for zero_idx, com_i in enumerate(body_indices):
+                p = doc.Paragraphs.Item(com_i)
+                style_name = str(p.Style.NameLocal)
+                txt = p.Range.Text.rstrip("\r\n\x07")
+                lines.append(f"`[p:{zero_idx}]` ({style_name}): {txt}")
+
+            for t_idx in range(1, num_tables + 1):
+                tbl = tables.Item(t_idx)
+                lines.append(f"\n`[table:{t_idx - 1}]` Table ({tbl.Rows.Count}x{tbl.Columns.Count}):")
+                for r_idx in range(1, tbl.Rows.Count + 1):
+                    row = tbl.Rows.Item(r_idx)
+                    row_vals = [row.Cells.Item(c).Range.Text.rstrip("\r\n\x07") for c in range(1, row.Cells.Count + 1)]
+                    lines.append(f"  row {r_idx - 1}: | " + " | ".join(row_vals) + " |")
+                lines.append("")
+
+            return "\n".join(lines)
+
+        return com_worker.run(_read)
+
+    @staticmethod
+    def mutate_element(
+        doc: Any,
+        file_path: Union[str, Path],
+        target_index: int,
+        action: Literal["insert_before", "insert_after", "delete", "replace"],
+        content: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Perform surgical mutation at target 0-based paragraph index with Track Changes."""
+        def _mutate() -> Dict[str, Any]:
+            vmap = _build_visible_map(doc)
+            body_indices = vmap["indices"]
+            if target_index < 0 or target_index >= len(body_indices):
+                valid = f"0..{len(body_indices) - 1}" if body_indices else "empty"
+                raise LiveWordError(
+                    ERROR_MESSAGES["index_out_of_range"].format(target_index=target_index, valid_range=valid)
+                )
+
+            com_i = body_indices[target_index]
+            p = doc.Paragraphs.Item(com_i)
+            path = Path(file_path)
+
+            with live_call(doc, "mutate_element", f"[p:{target_index}] {action}", track=True):
+                if action == "delete":
+                    p.Range.Delete()
+                    fresh_outline = _get_local_outline(doc, target_index)
+                    return {
+                        "status": "success",
+                        "action": "delete",
+                        "target_index": target_index,
+                        "file_path": str(path),
+                        "local_outline": fresh_outline,
+                    }
+
+                if action == "replace":
+                    c = content or {}
+                    new_text = str(c.get("text", ""))
+                    rng = p.Range
+                    # Shrink range end by 1 to retain paragraph mark '\r'
+                    if rng.End > rng.Start:
+                        rng.End = rng.End - 1
+                    rng.Text = new_text
+
+                    if "style" in c:
+                        try:
+                            p.Style = c["style"]
+                        except Exception:
+                            pass
+                    if c.get("bold") is not None:
+                        rng.Font.Bold = bool(c["bold"])
+                    if c.get("italic") is not None:
+                        rng.Font.Italic = bool(c["italic"])
+
+                    fresh_outline = _get_local_outline(doc, target_index)
+                    return {
+                        "status": "success",
+                        "action": "replace",
+                        "target_index": target_index,
+                        "file_path": str(path),
+                        "updated_text": new_text,
+                        "local_outline": fresh_outline,
+                    }
+
+                if action in ("insert_before", "insert_after"):
+                    c = content or {}
+                    new_text = str(c.get("text", ""))
+                    style = c.get("style", "Normal")
+
+                    if action == "insert_before":
+                        new_p = doc.Paragraphs.Add(p.Range)
+                    else:
+                        rng = p.Range
+                        collapse_rng = doc.Range(rng.End, rng.End)
+                        new_p = doc.Paragraphs.Add(collapse_rng)
+
+                    try:
+                        new_p.Style = style
+                    except Exception:
+                        pass
+
+                    rng_new = new_p.Range
+                    if rng_new.End > rng_new.Start:
+                        rng_new.End = rng_new.End - 1
+                    rng_new.Text = new_text
+
+                    if c.get("bold") is not None:
+                        rng_new.Font.Bold = bool(c["bold"])
+                    if c.get("italic") is not None:
+                        rng_new.Font.Italic = bool(c["italic"])
+
+                    fresh_outline = _get_local_outline(doc, target_index)
+                    return {
+                        "status": "success",
+                        "action": action,
+                        "target_index": target_index,
+                        "file_path": str(path),
+                        "local_outline": fresh_outline,
+                    }
+
+            raise ValueError(f"Unknown action: {action}")
+
+        return com_worker.run(_mutate)
+
+    @staticmethod
+    def find_and_replace(
+        doc: Any,
+        file_path: Union[str, Path],
+        find_text: str,
+        replace_text: str,
+        match_case: bool = True,
+        scope: Literal["all", "body", "tables", "headers_footers"] = "body",
+    ) -> Dict[str, Any]:
+        """Locate-then-set find and replace avoiding 255-char replacement limits and skipping deletions."""
+        if not find_text:
+            raise ValueError("find_text cannot be empty.")
+        if len(find_text) > 255:
+            raise ValueError("find_text exceeds Word 255 character limit.")
+
+        def _fnr() -> Dict[str, Any]:
+            path = Path(file_path)
+            count = 0
+            with live_call(doc, "find_and_replace", f"'{find_text[:20]}'", track=True):
+                body_rng = doc.Content
+                find_obj = body_rng.Find
+                find_obj.ClearFormatting()
+                find_obj.Text = find_text
+                find_obj.MatchCase = match_case
+                find_obj.Forward = True
+                find_obj.Wrap = 0  # wdFindStop
+
+                # Locate each match and replace literally
+                while find_obj.Execute():
+                    # Skip if inside tracked deletion
+                    in_del = False
+                    try:
+                        for rev in body_rng.Revisions:
+                            if rev.Type == WD_REVISION_DELETE:
+                                in_del = True
+                                break
+                    except Exception:
+                        pass
+
+                    if not in_del:
+                        body_rng.Text = replace_text
+                        count += 1
+
+                    # Collapse to end and continue search forward
+                    body_rng.Collapse(0)  # wdCollapseEnd
+
+            return {
+                "status": "success",
+                "file_path": str(path),
+                "matches_replaced": count,
+                "find_text": find_text,
+                "replace_text": replace_text,
+            }
+
+        return com_worker.run(_fnr)

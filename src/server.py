@@ -1,6 +1,7 @@
 """FastMCP Word DOCX Server.
 
-Exposes 8 consolidated endpoints with 0-based indexing contracts and low-level XML mutations
+Exposes 8 consolidated endpoints with 0-based indexing contracts, low-level XML mutations,
+and automatic detection between Live Microsoft Word (COM) and Headless (python-docx/lxml) backends
 for token-efficient Word document manipulation in Antigravity IDE.
 """
 
@@ -20,6 +21,21 @@ try:
     from src.oxml_engine import DocxEngine
 except ImportError:
     from oxml_engine import DocxEngine
+
+try:
+    from src.live_engine import (
+        LiveWordEngine,
+        pick_backend,
+        LiveWordError,
+        ERROR_MESSAGES,
+    )
+except ImportError:
+    from live_engine import (
+        LiveWordEngine,
+        pick_backend,
+        LiveWordError,
+        ERROR_MESSAGES,
+    )
 
 # Initialize FastMCP Server
 mcp = FastMCP("word-docx")
@@ -45,7 +61,23 @@ def read_document(
             - "metadata": Core properties (author, title, revision, timestamps).
         table_index: 0-based table index (required when mode="table", e.g. 0 for first table).
     """
-    return DocxEngine.read_document(file_path, mode=mode, table_index=table_index)
+    backend, com_doc = pick_backend(file_path, tool_name="read_document", is_mutation=False)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.read_document(com_doc, file_path, mode=mode, table_index=table_index)
+        if isinstance(res, str):
+            return f"[backend: live]\n{res}"
+        if isinstance(res, dict):
+            res["backend"] = "live"
+            return res
+        return res
+
+    res = DocxEngine.read_document(file_path, mode=mode, table_index=table_index)
+    if isinstance(res, str):
+        return f"[backend: headless]\n{res}"
+    if isinstance(res, dict):
+        res["backend"] = "headless"
+        return res
+    return res
 
 
 @mcp.tool()
@@ -68,7 +100,13 @@ def compose_document(
             - {"type": "page_break"}
         create_if_missing: If True, creates the document if it doesn't already exist.
     """
-    return DocxEngine.compose_document(file_path, actions=actions, create_if_missing=create_if_missing)
+    backend, com_doc = pick_backend(file_path, tool_name="compose_document", is_mutation=True)
+    if backend == "live":
+        raise LiveWordError(ERROR_MESSAGES["tool_not_yet_live_capable"].format(tool_name="compose_document"))
+
+    res = DocxEngine.compose_document(file_path, actions=actions, create_if_missing=create_if_missing)
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -93,12 +131,26 @@ def mutate_element(
         content: Content dictionary for insertion/replacement (e.g. {"type": "paragraph", "text": "...", "bold": True},
                  or {"type": "heading", "text": "...", "level": 2}, or {"type": "table", "headers": [...], "rows": [...]}).
     """
-    return DocxEngine.mutate_element(
+    backend, com_doc = pick_backend(file_path, tool_name="mutate_element", is_mutation=True)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.mutate_element(
+            com_doc,
+            file_path,
+            target_index=target_index,
+            action=action,
+            content=content,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.mutate_element(
         file_path,
         target_index=target_index,
         action=action,
         content=content,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -118,13 +170,28 @@ def find_and_replace(
         match_case: If True, performs case-sensitive replacement. Default is True.
         scope: Search scope ("all", "body", "tables", "headers_footers").
     """
-    return DocxEngine.find_and_replace(
+    backend, com_doc = pick_backend(file_path, tool_name="find_and_replace", is_mutation=True)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.find_and_replace(
+            com_doc,
+            file_path,
+            find_text=find_text,
+            replace_text=replace_text,
+            match_case=match_case,
+            scope=scope,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.find_and_replace(
         file_path,
         find_text=find_text,
         replace_text=replace_text,
         match_case=match_case,
         scope=scope,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -148,7 +215,11 @@ def set_page_layout(
         page_size: Paper size ("letter", "a4", "legal").
         orientation: Page orientation ("portrait", "landscape").
     """
-    return DocxEngine.set_page_layout(
+    backend, com_doc = pick_backend(file_path, tool_name="set_page_layout", is_mutation=True)
+    if backend == "live":
+        raise LiveWordError(ERROR_MESSAGES["tool_not_yet_live_capable"].format(tool_name="set_page_layout"))
+
+    res = DocxEngine.set_page_layout(
         file_path=file_path,
         top_cm=top_cm,
         bottom_cm=bottom_cm,
@@ -157,6 +228,8 @@ def set_page_layout(
         page_size=page_size,
         orientation=orientation,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -172,10 +245,16 @@ def update_styles(
                        'font', 'size_pt', 'bold', 'color', 'line_spacing', 'space_after_pt',
                        'space_before_pt', 'alignment', 'keep_next'.
     """
-    return DocxEngine.update_styles(
+    backend, com_doc = pick_backend(file_path, tool_name="update_styles", is_mutation=True)
+    if backend == "live":
+        raise LiveWordError(ERROR_MESSAGES["tool_not_yet_live_capable"].format(tool_name="update_styles"))
+
+    res = DocxEngine.update_styles(
         file_path=file_path,
         styles_config=styles_config,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -203,7 +282,11 @@ def format_table_grid(
         font_name: Optional font name for table text (e.g. 'Times New Roman').
         font_size_pt: Optional font size for table text in points (e.g. 11.0).
     """
-    return DocxEngine.format_table_grid(
+    backend, com_doc = pick_backend(file_path, tool_name="format_table_grid", is_mutation=True)
+    if backend == "live":
+        raise LiveWordError(ERROR_MESSAGES["tool_not_yet_live_capable"].format(tool_name="format_table_grid"))
+
+    res = DocxEngine.format_table_grid(
         file_path=file_path,
         table_indices=table_indices,
         border_sz=border_sz,
@@ -214,6 +297,8 @@ def format_table_grid(
         font_name=font_name,
         font_size_pt=font_size_pt,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -235,7 +320,11 @@ def clean_structure(
         max_consecutive_breaks: Maximum allowed consecutive page breaks (removes extras).
         normalize_all_colors_black: Force all font color tags in document.xml to #000000.
     """
-    return DocxEngine.clean_structure(
+    backend, com_doc = pick_backend(file_path, tool_name="clean_structure", is_mutation=True)
+    if backend == "live":
+        raise LiveWordError(ERROR_MESSAGES["tool_not_yet_live_capable"].format(tool_name="clean_structure"))
+
+    res = DocxEngine.clean_structure(
         file_path=file_path,
         remove_empty_paragraphs=remove_empty_paragraphs,
         remove_empty_tables=remove_empty_tables,
@@ -243,8 +332,9 @@ def clean_structure(
         max_consecutive_breaks=max_consecutive_breaks,
         normalize_all_colors_black=normalize_all_colors_black,
     )
+    res["backend"] = "headless"
+    return res
 
 
 if __name__ == "__main__":
     mcp.run()
-

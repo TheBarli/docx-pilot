@@ -338,12 +338,20 @@ class DocxEngine:
             p_elem = target_p._p
             p_elem.getparent().remove(p_elem)
             doc.save(str(path))
+            start_p = max(0, target_index - 2)
+            end_p = min(len(doc.paragraphs), target_index + 3)
+            outline = [
+                f"`[p:{i}]` ({doc.paragraphs[i].style.name if doc.paragraphs[i].style else 'Normal'}): "
+                f"{(doc.paragraphs[i].text[:60] + '...') if len(doc.paragraphs[i].text) > 60 else doc.paragraphs[i].text}"
+                for i in range(start_p, end_p)
+            ]
             return {
                 "status": "success",
                 "action": "delete",
                 "target_index": target_index,
                 "file_path": str(path),
                 "remaining_paragraphs": len(doc.paragraphs),
+                "local_outline": outline,
             }
 
         elif action == "replace":
@@ -358,12 +366,20 @@ class DocxEngine:
                     if content.get("italic") is not None:
                         run.italic = bool(content["italic"])
             doc.save(str(path))
+            start_p = max(0, target_index - 2)
+            end_p = min(len(doc.paragraphs), target_index + 3)
+            outline = [
+                f"`[p:{i}]` ({doc.paragraphs[i].style.name if doc.paragraphs[i].style else 'Normal'}): "
+                f"{(doc.paragraphs[i].text[:60] + '...') if len(doc.paragraphs[i].text) > 60 else doc.paragraphs[i].text}"
+                for i in range(start_p, end_p)
+            ]
             return {
                 "status": "success",
                 "action": "replace",
                 "target_index": target_index,
                 "file_path": str(path),
                 "updated_text": new_text,
+                "local_outline": outline,
             }
 
         elif action in ("insert_before", "insert_after"):
@@ -420,6 +436,13 @@ class DocxEngine:
                     target_p._p.addnext(temp_p._p)
 
             doc.save(str(path))
+            start_p = max(0, target_index - 2)
+            end_p = min(len(doc.paragraphs), target_index + 3)
+            outline = [
+                f"`[p:{i}]` ({doc.paragraphs[i].style.name if doc.paragraphs[i].style else 'Normal'}): "
+                f"{(doc.paragraphs[i].text[:60] + '...') if len(doc.paragraphs[i].text) > 60 else doc.paragraphs[i].text}"
+                for i in range(start_p, end_p)
+            ]
             return {
                 "status": "success",
                 "action": action,
@@ -427,6 +450,7 @@ class DocxEngine:
                 "file_path": str(path),
                 "total_paragraphs": len(doc.paragraphs),
                 "total_tables": len(doc.tables),
+                "local_outline": outline,
             }
 
         raise ValueError(f"Unknown action: {action}")
@@ -446,6 +470,8 @@ class DocxEngine:
         """
         if not find_text:
             raise ValueError("find_text cannot be empty.")
+        if len(find_text) > 255:
+            raise ValueError("find_text exceeds Word 255 character limit.")
 
         doc, path = get_or_create_document(file_path, create_if_missing=False)
         total_replacements = 0
