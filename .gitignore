@@ -24,6 +24,8 @@ htmlcov/
 *.pdf
 documents/*
 !documents/.gitkeep
+documents/.backups/
+documents/live_test.docx
 
 # Root scratch directory
 scratch/
