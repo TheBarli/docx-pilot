@@ -10,3 +10,4 @@ description: When editing, formatting, or inspecting a .docx with the word-docx 
 3. **Indices:** after any `mutate_element`, use the returned local outline for the next `[p:N]`. Do not reuse earlier indices. Re-read only if your target is not in the returned outline.
 4. **Errors:** if a tool reports the file is read-only, protected, in Protected View, cloud-hosted, appears open but cannot be attached, or that Word looks blocked by a dialog, follow `problem-resolve`: stop, relay the tool's message, wait.
 5. **How-to:** for workflow, reading semantics, and error triage, use the `live-word-editing` skill.
+

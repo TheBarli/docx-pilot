@@ -36,3 +36,4 @@ Stop per `problem-resolve`. Look up the message in `references/error-catalog.md`
 - Windows desktop Word only; attached to active Word session via COM (`GetActiveObject`).
 - Replacing text takes on the formatting of the first replaced character.
 - Automatic backups are saved to `documents/.backups/` before every mutating operation; the newest 20 per file stem are kept.
+
