@@ -97,7 +97,7 @@ The FastMCP entry point running over standard I/O (`stdio`). It sets the working
 | 1 | [`read_document`](src/server.py) | Inspect document structure, outline, tables, or metadata | `file_path`, `mode` (`"outline"`, `"full"`, `"table"`, `"metadata"`), `table_index` |
 | 2 | [`compose_document`](src/server.py) | Batch creation of headings, paragraphs, lists, tables, and page breaks | `file_path`, `actions` (list of element dicts), `create_if_missing` |
 | 3 | [`mutate_element`](src/server.py) | Surgical DOM insertions, deletions, or in-place replacements at `[p:N]` | `file_path`, `target_index`, `action` (`"insert_before"`, `"insert_after"`, `"delete"`, `"replace"`), `content` |
-| 4 | [`find_and_replace`](src/server.py) | Text search-and-replace preserving run formatting across paragraphs and tables | `file_path`, `find_text`, `replace_text`, `match_case`, `scope` |
+| 4 | [`find_and_replace`](src/server.py) | Text search-and-replace across paragraphs and tables (preserves run formatting on headless; inherits first character formatting on live) | `file_path`, `find_text`, `replace_text`, `match_case`, `scope` |
 | 5 | [`set_page_layout`](src/server.py) | Applies margins and paper size to **all** `<w:sectPr>` elements in the XML | `file_path`, `top_cm`, `bottom_cm`, `left_cm`, `right_cm`, `page_size`, `orientation` |
 | 6 | [`update_styles`](src/server.py) | Configures font family, font size, line spacing, spacing, and keepNext in `word/styles.xml` | `file_path`, `styles_config` (mapping of style names to formatting attributes) |
 | 7 | [`format_table_grid`](src/server.py) | Normalizes table borders, header shading, cell padding, `cantSplit`, and `tblHeader` | `file_path`, `table_indices`, `border_sz`, `border_color`, `header_shading`, `cant_split`, `repeat_header`, `font_name`, `font_size_pt` |
@@ -159,6 +159,7 @@ The server supports transparent dual-backend operation:
 
 4. **Scope & Tool Limitations**:
    - `find_and_replace`: Searches body text, tables, and headers/footers (`scope="all"` or `scope="headers_footers"`). Footnotes and endnotes are not searched.
+   - `find_and_replace` Formatting: Replaced text preserves granular run formatting on the headless backend; on the live backend, replaced text inherits the character formatting of the first replaced character.
    - `dry_run`: Supported on `clean_structure`; not supported on `find_and_replace`.
 
 ---
