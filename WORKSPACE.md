@@ -34,6 +34,9 @@ MsWord-ai-integration/
 │   │   └── [local dev rules excluded]      # Git, GH, and debugging rules via .git/info/exclude
 │   └── skills/
 │       └── live-word-editing/              # Skill containing live editing workflow & error triage
+│           ├── references/
+│           │   └── error-catalog.md        # Comprehensive COM error catalog & recovery actions
+│           └── SKILL.md                    # Live Word editing playbook and procedures
 ├── documents/                              # Dedicated working folder for input/output .docx files
 │   ├── .backups/                           # Automatic pre-mutation safety backups (latest 20 retained)
 │   └── .gitkeep                            # Keeps directory tracked while ignoring binary docs
