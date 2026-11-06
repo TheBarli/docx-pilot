@@ -1,6 +1,7 @@
 """FastMCP Word DOCX Server.
 
-Exposes 8 consolidated endpoints with 0-based indexing contracts and low-level XML mutations
+Exposes 8 consolidated endpoints with 0-based indexing contracts, low-level XML mutations,
+and automatic detection between Live Microsoft Word (COM) and Headless (python-docx/lxml) backends
 for token-efficient Word document manipulation in Antigravity IDE.
 """
 
@@ -20,6 +21,66 @@ try:
     from src.oxml_engine import DocxEngine
 except ImportError:
     from oxml_engine import DocxEngine
+
+try:
+    from src.live_engine import (
+        LiveWordEngine,
+        pick_backend,
+        LiveWordError,
+        ERROR_MESSAGES,
+    )
+except ImportError:
+    from live_engine import (
+        LiveWordEngine,
+        pick_backend,
+        LiveWordError,
+        ERROR_MESSAGES,
+    )
+
+import datetime
+import shutil
+
+BACKUP_KEEP = 20
+
+
+def create_backup(file_path: Union[str, Path]) -> Optional[Path]:
+    """Create timestamped copy of document in documents/.backups/ before mutation.
+
+    Keeps only the most recent BACKUP_KEEP backups per file stem.
+    """
+    p = Path(file_path)
+    if not p.exists() or not p.is_file():
+        return None
+
+    backup_dir = p.parent / ".backups" if p.parent.name == "documents" else Path("documents/.backups")
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return None
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    backup_name = f"{p.stem}_{timestamp}{p.suffix}"
+    backup_path = backup_dir / backup_name
+
+    try:
+        shutil.copy2(str(p), str(backup_path))
+    except Exception:
+        return None
+
+    try:
+        stem_pattern = f"{p.stem}_*{p.suffix}"
+        existing = sorted(backup_dir.glob(stem_pattern), key=lambda x: x.stat().st_mtime)
+        if len(existing) > BACKUP_KEEP:
+            for old in existing[:-BACKUP_KEEP]:
+                try:
+                    old.unlink()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    return backup_path
+
 
 # Initialize FastMCP Server
 mcp = FastMCP("word-docx")
@@ -45,7 +106,23 @@ def read_document(
             - "metadata": Core properties (author, title, revision, timestamps).
         table_index: 0-based table index (required when mode="table", e.g. 0 for first table).
     """
-    return DocxEngine.read_document(file_path, mode=mode, table_index=table_index)
+    backend, com_doc = pick_backend(file_path, tool_name="read_document", is_mutation=False)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.read_document(com_doc, file_path, mode=mode, table_index=table_index)
+        if isinstance(res, str):
+            return f"[backend: live]\n{res}"
+        if isinstance(res, dict):
+            res["backend"] = "live"
+            return res
+        return res
+
+    res = DocxEngine.read_document(file_path, mode=mode, table_index=table_index)
+    if isinstance(res, str):
+        return f"[backend: headless]\n{res}"
+    if isinstance(res, dict):
+        res["backend"] = "headless"
+        return res
+    return res
 
 
 @mcp.tool()
@@ -68,7 +145,21 @@ def compose_document(
             - {"type": "page_break"}
         create_if_missing: If True, creates the document if it doesn't already exist.
     """
-    return DocxEngine.compose_document(file_path, actions=actions, create_if_missing=create_if_missing)
+    create_backup(file_path)
+    backend, com_doc = pick_backend(file_path, tool_name="compose_document", is_mutation=True)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.compose_document(
+            com_doc,
+            file_path,
+            actions=actions,
+            create_if_missing=create_if_missing,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.compose_document(file_path, actions=actions, create_if_missing=create_if_missing)
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -93,12 +184,27 @@ def mutate_element(
         content: Content dictionary for insertion/replacement (e.g. {"type": "paragraph", "text": "...", "bold": True},
                  or {"type": "heading", "text": "...", "level": 2}, or {"type": "table", "headers": [...], "rows": [...]}).
     """
-    return DocxEngine.mutate_element(
+    create_backup(file_path)
+    backend, com_doc = pick_backend(file_path, tool_name="mutate_element", is_mutation=True)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.mutate_element(
+            com_doc,
+            file_path,
+            target_index=target_index,
+            action=action,
+            content=content,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.mutate_element(
         file_path,
         target_index=target_index,
         action=action,
         content=content,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -118,13 +224,29 @@ def find_and_replace(
         match_case: If True, performs case-sensitive replacement. Default is True.
         scope: Search scope ("all", "body", "tables", "headers_footers").
     """
-    return DocxEngine.find_and_replace(
+    create_backup(file_path)
+    backend, com_doc = pick_backend(file_path, tool_name="find_and_replace", is_mutation=True)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.find_and_replace(
+            com_doc,
+            file_path,
+            find_text=find_text,
+            replace_text=replace_text,
+            match_case=match_case,
+            scope=scope,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.find_and_replace(
         file_path,
         find_text=find_text,
         replace_text=replace_text,
         match_case=match_case,
         scope=scope,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -148,7 +270,23 @@ def set_page_layout(
         page_size: Paper size ("letter", "a4", "legal").
         orientation: Page orientation ("portrait", "landscape").
     """
-    return DocxEngine.set_page_layout(
+    create_backup(file_path)
+    backend, com_doc = pick_backend(file_path, tool_name="set_page_layout", is_mutation=True)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.set_page_layout(
+            com_doc,
+            file_path=file_path,
+            top_cm=top_cm,
+            bottom_cm=bottom_cm,
+            left_cm=left_cm,
+            right_cm=right_cm,
+            page_size=page_size,
+            orientation=orientation,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.set_page_layout(
         file_path=file_path,
         top_cm=top_cm,
         bottom_cm=bottom_cm,
@@ -157,6 +295,8 @@ def set_page_layout(
         page_size=page_size,
         orientation=orientation,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -172,10 +312,23 @@ def update_styles(
                        'font', 'size_pt', 'bold', 'color', 'line_spacing', 'space_after_pt',
                        'space_before_pt', 'alignment', 'keep_next'.
     """
-    return DocxEngine.update_styles(
+    create_backup(file_path)
+    backend, com_doc = pick_backend(file_path, tool_name="update_styles", is_mutation=True)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.update_styles(
+            com_doc,
+            file_path=file_path,
+            styles_config=styles_config,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.update_styles(
         file_path=file_path,
         styles_config=styles_config,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -203,7 +356,25 @@ def format_table_grid(
         font_name: Optional font name for table text (e.g. 'Times New Roman').
         font_size_pt: Optional font size for table text in points (e.g. 11.0).
     """
-    return DocxEngine.format_table_grid(
+    create_backup(file_path)
+    backend, com_doc = pick_backend(file_path, tool_name="format_table_grid", is_mutation=True)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.format_table_grid(
+            com_doc,
+            file_path=file_path,
+            table_indices=table_indices,
+            border_sz=border_sz,
+            border_color=border_color,
+            header_shading=header_shading,
+            cant_split=cant_split,
+            repeat_header=repeat_header,
+            font_name=font_name,
+            font_size_pt=font_size_pt,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.format_table_grid(
         file_path=file_path,
         table_indices=table_indices,
         border_sz=border_sz,
@@ -214,6 +385,8 @@ def format_table_grid(
         font_name=font_name,
         font_size_pt=font_size_pt,
     )
+    res["backend"] = "headless"
+    return res
 
 
 @mcp.tool()
@@ -224,6 +397,7 @@ def clean_structure(
     extract_single_image_tables: bool = True,
     max_consecutive_breaks: int = 1,
     normalize_all_colors_black: bool = False,
+    dry_run: bool = False,
 ) -> Dict[str, Any]:
     """Automated hygiene primitive that strips trailing empty <w:p> nodes, removes empty tables with 0 text/drawings, and purges rogue page breaks.
 
@@ -234,17 +408,37 @@ def clean_structure(
         extract_single_image_tables: Move images out of single-image container tables and remove the table.
         max_consecutive_breaks: Maximum allowed consecutive page breaks (removes extras).
         normalize_all_colors_black: Force all font color tags in document.xml to #000000.
+        dry_run: If True, calculates and reports cleanable items without modifying document.
     """
-    return DocxEngine.clean_structure(
+    if not dry_run:
+        create_backup(file_path)
+    backend, com_doc = pick_backend(file_path, tool_name="clean_structure", is_mutation=not dry_run)
+    if backend == "live" and com_doc is not None:
+        res = LiveWordEngine.clean_structure(
+            com_doc,
+            file_path,
+            remove_empty_paragraphs=remove_empty_paragraphs,
+            remove_empty_tables=remove_empty_tables,
+            extract_single_image_tables=extract_single_image_tables,
+            max_consecutive_breaks=max_consecutive_breaks,
+            normalize_all_colors_black=normalize_all_colors_black,
+            dry_run=dry_run,
+        )
+        res["backend"] = "live"
+        return res
+
+    res = DocxEngine.clean_structure(
         file_path=file_path,
         remove_empty_paragraphs=remove_empty_paragraphs,
         remove_empty_tables=remove_empty_tables,
         extract_single_image_tables=extract_single_image_tables,
         max_consecutive_breaks=max_consecutive_breaks,
         normalize_all_colors_black=normalize_all_colors_black,
+        dry_run=dry_run,
     )
+    res["backend"] = "headless"
+    return res
 
 
 if __name__ == "__main__":
     mcp.run()
-

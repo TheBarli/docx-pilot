@@ -7,10 +7,12 @@ A high-performance, token-efficient Model Context Protocol (MCP) server for insp
 ## Highlights
 
 * **Consolidated 8-Tool Architecture**: Covers the full document manipulation lifecycle—batch generation, surgical DOM mutation, global find-and-replace, section-level page layout, ECMA-376 style configuration, table grid normalization, and automated structural hygiene.
+* **Transparent Dual-Backend (Live COM + Headless)**: Automatically detects open Microsoft Word desktop sessions via Windows COM. When open, edits occur live inside Word with visual Track Changes and single-step `Ctrl + Z` undo (`UndoRecord`). When closed, operations run seamlessly headless via `python-docx` and `lxml`.
+* **Automatic Safety Backups**: Creates timestamped pre-mutation backups in `documents/.backups/` before any write operation, retaining the latest 20 revisions.
 * **Strict 0-Based Indexing**: All paragraph (`[p:N]`), table (`[table:N]`), row, and column identifiers strictly use 0-based indexing to eliminate off-by-one hallucinations.
 * **Low-Level XML Mutations**: Leverages underlying `lxml`/`oxml` element nodes (`addprevious`, `addnext`, `parent.remove`) for in-place paragraph/table insertions and clean deletions without empty-node document corruption.
 * **ECMA-376 Schema Compliance**: Automated child sequence sorting (`STYLE_ORDER`, `PPR_ORDER`, `RPR_ORDER`) ensures manipulated documents open cleanly in Microsoft Word without "repaired content" warnings.
-* **Pinned Python 3.11 Runtime**: Guarantees pre-built C-wheels on Windows for `lxml` and `python-docx`.
+* **Pinned Python 3.11 Runtime**: Guarantees pre-built C-wheels on Windows for `lxml`, `python-docx`, and `pywin32`.
 
 ---
 
@@ -153,6 +155,7 @@ Performs automated hygiene passes to eliminate structural bloat:
 * Extracts single images wrapped in tables and converts them to centered standalone paragraphs.
 * Caps consecutive page breaks.
 * Optionally forces all text color declarations in `document.xml` to pure black (`#000000`).
+* Non-destructive inspection preview when `dry_run=True`.
 * **Signature**:
   ```python
   clean_structure(
@@ -161,7 +164,8 @@ Performs automated hygiene passes to eliminate structural bloat:
       remove_empty_tables: bool = True,
       extract_single_image_tables: bool = True,
       max_consecutive_breaks: int = 1,
-      normalize_all_colors_black: bool = False
+      normalize_all_colors_black: bool = False,
+      dry_run: bool = False
   ) -> dict
   ```
 

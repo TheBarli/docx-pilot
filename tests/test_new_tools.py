@@ -142,6 +142,19 @@ class TestSetPageLayout:
                 assert pg_sz.attrib[f"{{{W_NS}}}w"] == "16834"
                 assert pg_sz.attrib[f"{{{W_NS}}}h"] == "11909"
 
+    def test_dry_run_leaves_document_intact(self, tmp_path: Path):
+        docx_path = _make_docx(tmp_path)
+        # Check initial empty paragraphs
+        res_dry = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=True)
+        assert res_dry["status"] == "success"
+        assert res_dry["dry_run"] is True
+        assert res_dry["empty_paragraphs_removed"] >= 2
+        
+        # Second run without dry_run should still find and remove them
+        res_real = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=False)
+        assert res_real["dry_run"] is False
+        assert res_real["empty_paragraphs_removed"] >= 2
+
     def test_roundtrip(self, tmp_path: Path):
         docx_path = _make_docx(tmp_path)
         DocxEngine.set_page_layout(docx_path)
@@ -252,6 +265,19 @@ class TestUpdateStyles:
                 found = True
         assert found, "Heading1 style not found after update"
 
+    def test_dry_run_leaves_document_intact(self, tmp_path: Path):
+        docx_path = _make_docx(tmp_path)
+        # Check initial empty paragraphs
+        res_dry = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=True)
+        assert res_dry["status"] == "success"
+        assert res_dry["dry_run"] is True
+        assert res_dry["empty_paragraphs_removed"] >= 2
+        
+        # Second run without dry_run should still find and remove them
+        res_real = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=False)
+        assert res_real["dry_run"] is False
+        assert res_real["empty_paragraphs_removed"] >= 2
+
     def test_roundtrip(self, tmp_path: Path):
         docx_path = _make_docx(tmp_path)
         DocxEngine.update_styles(docx_path, styles_config={"Normal": {"font": "Arial", "size_pt": 11}})
@@ -330,6 +356,19 @@ class TestFormatTableGrid:
             top_b = borders.find("w:top", namespaces={"w": W_NS})
             assert top_b.attrib[f"{{{W_NS}}}sz"] == "8"
             assert top_b.attrib[f"{{{W_NS}}}color"] == "FF0000"
+
+    def test_dry_run_leaves_document_intact(self, tmp_path: Path):
+        docx_path = _make_docx(tmp_path)
+        # Check initial empty paragraphs
+        res_dry = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=True)
+        assert res_dry["status"] == "success"
+        assert res_dry["dry_run"] is True
+        assert res_dry["empty_paragraphs_removed"] >= 2
+        
+        # Second run without dry_run should still find and remove them
+        res_real = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=False)
+        assert res_real["dry_run"] is False
+        assert res_real["empty_paragraphs_removed"] >= 2
 
     def test_roundtrip(self, tmp_path: Path):
         docx_path = _make_docx(tmp_path)
@@ -434,6 +473,31 @@ class TestCleanStructure:
         DocxEngine.clean_structure(docx_path, normalize_all_colors_black=False, remove_empty_paragraphs=False)
         # Simply assert no exception and file is valid
         _roundtrip(docx_path)
+
+    def test_dry_run_leaves_document_intact(self, tmp_path: Path):
+        docx_path = _make_docx(tmp_path)
+        res_dry = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=True)
+        assert res_dry['status'] == 'success'
+        assert res_dry['dry_run'] is True
+        assert res_dry['empty_paragraphs_removed'] >= 2
+
+        # Second run without dry_run should still find and remove them
+        res_real = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=False)
+        assert res_real['dry_run'] is False
+        assert res_real['empty_paragraphs_removed'] >= 2
+
+    def test_dry_run_leaves_document_intact(self, tmp_path: Path):
+        docx_path = _make_docx(tmp_path)
+        # Check initial empty paragraphs
+        res_dry = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=True)
+        assert res_dry["status"] == "success"
+        assert res_dry["dry_run"] is True
+        assert res_dry["empty_paragraphs_removed"] >= 2
+        
+        # Second run without dry_run should still find and remove them
+        res_real = DocxEngine.clean_structure(docx_path, remove_empty_paragraphs=True, dry_run=False)
+        assert res_real["dry_run"] is False
+        assert res_real["empty_paragraphs_removed"] >= 2
 
     def test_roundtrip(self, tmp_path: Path):
         docx_path = _make_docx(tmp_path)
