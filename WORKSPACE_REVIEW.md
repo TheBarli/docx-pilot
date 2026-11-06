@@ -162,12 +162,12 @@ With Microsoft Word closed:  42 passed, 17 skipped
 | Gate | Description | Type | Status | Details / Actions |
 |------|-------------|:----:|:------:|-------------------|
 | **Gate 0** | Preparation & COM Worker Safety | Automated | **PASSED** | Worker unit tests pass; `HAS_COM=False` headless fallback verified. |
-| **Gate 1** | Interactive Live Checklist | **[HUMAN]** | **PASSED** | Verified in active Word session on `documents/live_test.docx`: (1) edit appeared within ~1s, (2) single Ctrl+Z undo verified, (3) tracked changes displayed, (4) headless fallback verified on close, (5) out-of-range clean error, (6) modal dialog safety & recovery verified. |
+| **Gate 1** | Interactive Live Checklist | **[HUMAN]** | **PASSED** | Verified in active Word session on `documents/live_test.docx` (signed off by the repo owner, 2026-11-06): (1) edit appeared within ~1s, (2) single Ctrl+Z undo verified, (3) tracked changes displayed, (4) headless fallback verified on close, (5) out-of-range clean error, (6) modal dialog safety & recovery verified. |
 | **Gate 2** | Tool Parity Comparison | Automated | **PASSED** | `academic-id.yaml` pipeline executed live and headless on identical input; metadata, layout, and styles match. |
 | **Gate 3** | Full Test Parity & Dry Run | Automated | **PASSED (scoped: `dry_run` on `clean_structure` only)** | Automated tests passing with Word open (17 skipped when Word closed); `dry_run` verified on `clean_structure` only. |
 | **Gate 4** | Final Launch & Merge Review | **[HUMAN]** | **PENDING USER SIGN-OFF** | User review of Draft PR #2, documentation, rules, and skills before merging to `master`. |
 
-### Gate 1 [HUMAN] Checklist (Verified & Signed Off)
+### Gate 1 [HUMAN] Checklist (signed off by the repo owner, 2026-11-06)
 Executed on `documents/live_test.docx`:
 - [x] 1. Edit appears on screen within ~1 second.
 - [x] 2. `Ctrl + Z` undoes exactly one agent tool call.
