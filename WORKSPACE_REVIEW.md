@@ -4,7 +4,7 @@
 **Current Branch:** `feat/live-word-backend`  
 **Base Tracking:** `origin/refactor/mcp-and-directory-cleanup` (Default: `origin/master`)  
 **Environment:** Python 3.11.9 (`.venv`), FastMCP 4.0+, Windows COM (`pywin32` 312)  
-**Status:** **Phases 0–2 and 4 implemented; Phase 3 partial (see Known Limitations) | Automated Gates 0, 2, 3 Passed | 59 Passed with Word Running (13 Skipped When Word Closed) | Pending Human Gates 1 & 4**
+**Status:** **Phases 0–2 and 4 implemented; Phase 3 partial (see Known Limitations) | Automated Gates 0, 2, 3 Passed | 59 Passed with Word Running (17 Skipped When Word Closed) | Pending Human Gates 1 & 4**
 
 ---
 
@@ -53,12 +53,13 @@ MsWord-ai-integration/
 │   ├── test_new_tools.py                   # Headless layout, styles, table, hygiene tests (30 tests)
 │   ├── test_live_worker.py                 # COM worker thread, timeout, poisoned-state tests (9 tests)
 │   ├── test_live_engine.py                 # Live COM integration tests (12 tests)
-│   └── test_gate_2_parity.py               # Live vs Headless feature parity test (1 test)
+│   ├── test_gate_2_parity.py               # Live vs Headless feature parity test (1 test)
+│   └── test_outline_parity.py              # Exact outline parity and performance tests (4 tests)
 ├── .gitignore                              # Git exclusion patterns (scratch/*, .agent-info/, documents/*)
 ├── .python-version                         # Pinned Python version (3.11.9)
 ├── demo.py                                 # Standalone end-to-end demonstration script
 ├── pytest.ini                              # Pytest configuration & marker declarations ('live')
-├── requirements.txt                        # Pinned runtime and testing dependencies
+├── requirements.txt                        # Runtime and testing dependencies (minimum versions)
 ├── README.md                               # Public-facing repository documentation
 ├── WORKSPACE.md                            # Comprehensive workspace architecture guide
 └── WORKSPACE_REVIEW.md                     # Current workspace review & status document
@@ -140,8 +141,8 @@ Tool Invocation (file_path)
 ## 6. Test Suite & Verification Metrics
 
 ```text
-With Microsoft Word running: 55 passed in 14.34s
-With Microsoft Word closed:  42 passed, 13 skipped
+With Microsoft Word running: 59 passed in ~16s
+With Microsoft Word closed:  42 passed, 17 skipped
 ```
 
 | Suite | File | Tests | Status | Scope |
@@ -151,6 +152,7 @@ With Microsoft Word closed:  42 passed, 13 skipped
 | COM Worker | [`tests/test_live_worker.py`](tests/test_live_worker.py) | 9 | **PASSED** | Timeouts, poisoned state, thread preservation, lock detection |
 | Live Integration | [`tests/test_live_engine.py`](tests/test_live_engine.py) | 12 | **PASSED** | Live open/close, outline, mutations, undo, compose, layout, styles, tables, cleanup |
 | Parity Verification | [`tests/test_gate_2_parity.py`](tests/test_gate_2_parity.py) | 1 | **PASSED** | End-to-end parity validation across all 8 tools on `academic-id.yaml` |
+| Outline Parity | [`tests/test_outline_parity.py`](tests/test_outline_parity.py) | 4 | **PASSED** | Exact outline parity across short/long docs, tables, deletions, and 1,000-paragraph perf |
 
 ---
 

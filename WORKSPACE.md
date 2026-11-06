@@ -53,7 +53,8 @@ MsWord-ai-integration/
 │   ├── test_new_tools.py                   # Tests for page layout, styles, tables, and hygiene
 │   ├── test_live_worker.py                 # Single-threaded COM worker, timeouts, and state safety
 │   ├── test_live_engine.py                 # Live Word COM integration tests (12 tests)
-│   └── test_gate_2_parity.py               # End-to-end parity test across both backends
+│   ├── test_gate_2_parity.py               # End-to-end parity test across both backends
+│   └── test_outline_parity.py              # Tests for live/headless outline parity and performance
 ├── .gitignore                              # Git exclusions (binaries, caches, scratch files)
 ├── .python-version                         # Pinned Python version (3.11.9)
 ├── demo.py                                 # Self-contained end-to-end demo script
@@ -188,14 +189,22 @@ When opened in Antigravity IDE, the `word-docx` server is automatically recogniz
 - **Rule [`document-styling`](.agents/rules/document-styling.md)**: Enforces the 5-step preset styling pipeline.
 - **Skill [`live-word-editing`](.agents/skills/live-word-editing/SKILL.md)**: Procedure and error catalog lookup for interactive live editing.
 
+### Environment Variables
+
+| Variable | Values / Default | Effect |
+|----------|------------------|--------|
+| `WORD_BACKEND` | `auto` (default), `live`, `headless` | Forces or auto-detects the backend. `live` with the file not open in Word returns an error. |
+| `LIVE_CALL_TIMEOUT` | seconds, default `20` | Per-call COM timeout before the worker is marked poisoned. |
+
 ### Python Environment
 - Python version is pinned to **3.11.9** via [`.python-version`](.python-version).
-- Production dependencies in [`requirements.txt`](requirements.txt):
+- Production dependencies in [`requirements.txt`](requirements.txt) (minimum versions):
   - `fastmcp>=4.0.0`
   - `python-docx>=1.2.0`
   - `pydantic>=2.0.0`
   - `lxml>=6.1.0`
   - `pywin32>=306; sys_platform == 'win32'`
+- Testing dependencies:
   - `pytest>=9.0.0`
 
 ---
@@ -203,8 +212,8 @@ When opened in Antigravity IDE, the `word-docx` server is automatically recogniz
 ## 8. Testing & Quality Assurance
 
 Test execution behavior:
-- **With Word running:** 55 passed (42 headless, 13 live tests).
-- **With Word closed:** 42 passed, 13 live tests skipped.
+- **With Word running:** 59 passed (42 headless, 17 live tests).
+- **With Word closed:** 42 passed, 17 live tests skipped.
 
 ```powershell
 # Run headless tests (no Word required)
@@ -220,6 +229,7 @@ Test execution behavior:
 - **[`tests/test_live_worker.py`](tests/test_live_worker.py)**: Single-threaded COM worker isolation, timeouts, poisoned state, path matching, and lock file detection (9 tests).
 - **[`tests/test_live_engine.py`](tests/test_live_engine.py)**: 12 live COM tests verifying all 8 tools, single-step UndoRecord, and Track Changes.
 - **[`tests/test_gate_2_parity.py`](tests/test_gate_2_parity.py)**: Full end-to-end parity test executing `academic-id.yaml` styling pipeline across both backends on identical input (1 test).
+- **[`tests/test_outline_parity.py`](tests/test_outline_parity.py)**: 4 live COM tests verifying outline parity across short docs, 40+ line docs, tables, and tracked deletions under 2.0s budget (4 tests).
 
 ---
 
