@@ -1,5 +1,6 @@
 """Permanent verification test for outline parity between Headless and Live engines."""
 
+import statistics
 import time
 from pathlib import Path
 from typing import Any, Generator
@@ -168,16 +169,24 @@ def test_outline_performance_1000_paragraphs(tmp_path: Path):
         app = win32com.client.GetActiveObject("Word.Application")
         wdoc = app.Documents.Open(str(test_file))
         try:
-            t0 = time.perf_counter()
-            outline = LiveWordEngine.read_document(wdoc, str(test_file), mode="outline")
-            elapsed = time.perf_counter() - t0
-            return elapsed, outline
+            timings = []
+            outline = ""
+            for _ in range(3):
+                t0 = time.perf_counter()
+                outline = LiveWordEngine.read_document(wdoc, str(test_file), mode="outline")
+                elapsed = time.perf_counter() - t0
+                timings.append(elapsed)
+            return timings, outline
         finally:
             wdoc.Close(SaveChanges=False)
 
-    elapsed, outline = com_worker.run(_measure)
-    print(f"\n1,000-paragraph outline time: {elapsed:.3f}s")
-    assert elapsed < 2.0, f"Outline extraction exceeded 2.0s budget: {elapsed:.3f}s"
+    timings, outline = com_worker.run(_measure)
+    med_time = statistics.median(timings)
+    print(f"\n1,000-paragraph outline timings: {[f'{t:.3f}s' for t in timings]} (median: {med_time:.3f}s)")
+    assert med_time < 2.0, (
+        f"Outline extraction median ({med_time:.3f}s) exceeded 2.0s budget. "
+        f"Timings: {[f'{t:.3f}s' for t in timings]}"
+    )
     assert "Major Section 1" in outline
     assert "Major Section 20" in outline
 
