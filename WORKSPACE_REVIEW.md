@@ -1,8 +1,8 @@
 # Workspace Review: docx-pilot
 
 **Repository:** `TheBarli/docx-pilot`  
-**Current Branch:** `master`  
-**Base Tracking:** `origin/master`  
+**Current Branch:** `main`  
+**Base Tracking:** `origin/main`  
 **Environment:** Python 3.11.9 (`.venv`), FastMCP 4.0+, Windows COM (`pywin32` 312)  
 **Status:** **Phases 0–2 and 4 implemented; Phase 3 partial (see Known Limitations) | Automated Gates 0, 2, 3 Passed | 59 Passed with Word Running (17 Skipped When Word Closed) | All Human Gates (1 & 4) Passed**
 
@@ -165,7 +165,7 @@ With Microsoft Word closed:  42 passed, 17 skipped
 | **Gate 1** | Interactive Live Checklist | **[HUMAN]** | **PASSED** | Verified in active Word session on `documents/live_test.docx` (signed off by the repo owner, 2026-11-06): (1) edit appeared within ~1s, (2) single Ctrl+Z undo verified, (3) tracked changes displayed, (4) headless fallback verified on close, (5) out-of-range clean error, (6) modal dialog safety & recovery verified. |
 | **Gate 2** | Tool Parity Comparison | Automated | **PASSED** | `academic-id.yaml` pipeline executed live and headless on identical input; metadata, layout, and styles match. |
 | **Gate 3** | Full Test Parity & Dry Run | Automated | **PASSED (scoped: `dry_run` on `clean_structure` only)** | Automated tests passing with Word open (17 skipped when Word closed); `dry_run` verified on `clean_structure` only. |
-| **Gate 4** | Final Launch & Merge Review | **[HUMAN]** | **PASSED (2026-11-06)** | Final launch review completed; PR #2 squash-merged into `master` on 2026-11-06. |
+| **Gate 4** | Final Launch & Merge Review | **[HUMAN]** | **PASSED (2026-11-06)** | Final launch review completed; PR #2 squash-merged into `main` on 2026-11-06. |
 
 ### Gate 1 [HUMAN] Checklist (signed off by the repo owner, 2026-11-06)
 Executed on `documents/live_test.docx`:
@@ -180,9 +180,9 @@ Executed on `documents/live_test.docx`:
 
 ## 8. Git Health & PR Status
 
-* **Branch:** `master`
-* **Merged PR:** #2 (`https://github.com/TheBarli/docx-pilot/pull/2`) squash-merged into `master` on 2026-11-06.
+* **Branch:** `main`
+* **Merged PR:** #2 (`https://github.com/TheBarli/docx-pilot/pull/2`) squash-merged into `main` on 2026-11-06.
 * **Backup Tag:** `backup/live-word-pre-merge`
 * **Scratch Directory:** `scratch/` tracked via `scratch/.gitkeep`; contents (`scratch/*`) gitignored.
 * **Auxiliary Information:** `.agent-info/` excluded locally in `.git/info/exclude` and `.gitignore`, untracked from Git.
-* **Working Tree:** Clean on `master`. All verification gates completed and signed off.
+* **Working Tree:** Clean on `main`. All verification gates completed and signed off.
