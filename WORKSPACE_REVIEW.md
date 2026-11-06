@@ -92,7 +92,7 @@ Tool Invocation (file_path)
   * Dictionaries: Annotated with `"backend": "live"` or `"backend": "headless"`.
 
 ### COM Concurrency & Safety Safeguards
-* **Single Dedicated Worker Thread:** COM operations run inside `LiveWordCOMWorker` with `pythoncom.CoInitialize()`. COM objects never cross thread boundaries.
+* **Single Dedicated Worker Thread:** COM operations run inside `ComWorker` with `pythoncom.CoInitialize()`. COM objects never cross thread boundaries.
 * **Re-entrancy Protection:** Direct-thread execution bypasses queuing when a helper method already running on the COM worker thread invokes `com_worker.run()`, preventing self-deadlocks.
 * **Per-Call Timeout:** Default 20 seconds (configurable via `LIVE_CALL_TIMEOUT`).
 * **Poisoned State Protection:** If a call blocks on a Word modal dialog and times out, subsequent calls fail fast immediately rather than queuing behind the stuck thread until the dialog is dismissed.
