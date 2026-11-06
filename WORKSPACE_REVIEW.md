@@ -4,17 +4,17 @@
 **Current Branch:** `feat/live-word-backend`  
 **Base Tracking:** `origin/refactor/mcp-and-directory-cleanup` (Default: `origin/master`)  
 **Environment:** Python 3.11.9 (`.venv`), FastMCP 4.0+, Windows COM (`pywin32` 312)  
-**Status:** **Phases 0–4 Live Word Backend Complete | All 8 Tools Supported in Live & Headless | 55 Passed, 0 Failed Tests (100% Green) | Ready for Public Commit**
+**Status:** **Phases 0–4 Live Word Backend Implemented | Automated Gates 0, 2, 3 Passed | 55 Passed with Word Running (13 Skipped When Word Closed) | Pending Human Gates 1 & 4**
 
 ---
 
 ## 1. Executive Summary
 
-This workspace implements an isolated, token-efficient **Model Context Protocol (MCP)** server for Microsoft Word (`.docx`) manipulation tailored for AI agent pair-programming (Antigravity IDE). It features a robust **dual-backend architecture**:
+This workspace implements an isolated, token-efficient **Model Context Protocol (MCP)** server for Microsoft Word (`.docx`) manipulation tailored for AI agent pair-programming (Antigravity IDE). It features a **dual-backend architecture**:
 1. **Headless Backend (`DocxEngine`):** Fast, schema-safe `python-docx` + `lxml` manipulations with strict ECMA-376 XML child element ordering. Operates without requiring Microsoft Word installed or running.
 2. **Live Backend (`LiveWordEngine`):** Direct Windows COM bridge to an active Microsoft Word desktop session. Enables real-time document viewing, one-click Ctrl+Z single-step undo records, and Track Changes for collaborative review.
 
-All 8 tools across the unified MCP surface are fully operational in both headless and live modes. Gate 0 (Preparation), Gate 1 (Spike & Outline Optimization), Gate 2 (Tool Parity), and Gate 3 (Live Verification & Real-World Load) have been successfully passed.
+All 8 tools across the unified MCP surface are implemented for both headless and live modes. Automated verification gates (Gate 0, Gate 2, Gate 3) have passed. Interactive verification gates (Gate 1 and Gate 4) are cataloged for human sign-off before merging.
 
 ---
 
@@ -61,13 +61,13 @@ MsWord-ai-integration/
 └── WORKSPACE_REVIEW.md                     # Current workspace review & status document
 ```
 
-> *Note: Internal agent research, reviews, and logs located in `.agent-info/` are excluded locally (`.git/info/exclude` and `.gitignore`) and removed from Git tracking.*
+> *Note: Internal research notes, design plans, and reviews inside `.agent-info/` are excluded locally (`.git/info/exclude` and `.gitignore`) and untracked from Git.*
 
 ---
 
 ## 3. Dual-Backend Architecture & Routing Logic
 
-Every MCP call routes through `pick_backend(file_path, tool_name, is_mutation)` in [`src/live_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/live_engine.py):
+Every MCP call routes through `pick_backend(file_path, tool_name, is_mutation)` in [`src/live_engine.py`](src/live_engine.py):
 
 ```
 Tool Invocation (file_path)
@@ -84,7 +84,7 @@ Tool Invocation (file_path)
 ```
 
 ### Response Prefix Contract
-* All responses from [`src/server.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py) indicate the active backend:
+* All responses from [`src/server.py`](src/server.py) indicate the active backend:
   * String dumps: Prefixed with `[backend: live]\n` or `[backend: headless]\n`.
   * Dictionaries: Annotated with `"backend": "live"` or `"backend": "headless"`.
 
@@ -94,10 +94,11 @@ Tool Invocation (file_path)
 * **Per-Call Timeout:** Default 20 seconds (configurable via `LIVE_CALL_TIMEOUT`).
 * **Poisoned State Protection:** If a call blocks on a Word modal dialog and times out, subsequent calls fail fast immediately rather than queuing behind the stuck thread until the dialog is dismissed.
 * **Automatic Pre-Mutation Backups:** Before any mutating operation executes in `src/server.py`, the target document is safely copied to `documents/.backups/` (retaining the 20 most recent revisions).
+  * **Backup limitation:** Backups copy the on-disk file. Any unsaved edits made directly in the active Word session prior to the tool call are not captured in the backup until saved to disk by the user.
 
 ---
 
-## 4. The 8 MCP Tools Status Matrix
+## 4. The 8 MCP Tools Status Matrix & Known Limitations
 
 | # | MCP Tool Name | Headless Engine (`DocxEngine`) | Live Engine (`LiveWordEngine`) | Live Tracking Policy | Primary Function |
 |---|---------------|:------------------------------:|:------------------------------:|:--------------------:|------------------|
@@ -110,34 +111,71 @@ Tool Invocation (file_path)
 | 7 | `format_table_grid` | ✅ XML table borders & fills | ✅ COM Table Borders & Fills | Untracked | Standardizes borders, padding, `#E8ECEF` header shading, `cantSplit`, `tblHeader` |
 | 8 | `clean_structure` | ✅ Structural hygiene | ✅ COM Structural Hygiene | Mixed | Strips empty paragraphs/tables, caps page breaks, supports `dry_run` |
 
+### Known Limitations & Scope Boundaries
+* **`find_and_replace` Scope:** Searches document body, tables, and headers/footers (`scope="all"`, `"body"`, `"tables"`, `"headers_footers"`). Footnotes and endnotes are not searched.
+* **`find_and_replace` Dry Run:** `dry_run` is not supported on `find_and_replace` (supported only on `clean_structure`).
+* **Replace Formatting:** In live mode, text replacement via `Range.Text` inherits the formatting of the first character of the replaced range.
+* **Multiple Word Instances:** Detection attaches to the instance returned by `GetActiveObject`. If Word is running in multiple separate process instances, documents in secondary instances trigger the lock-file safety net rather than direct COM attachment.
+
 ---
 
-## 5. Test Suite & Verification Metrics
+## 5. Experiment Results & Architectural Decisions
+
+| Experiment | Focus Area | Result / Status | Architectural Decision |
+|------------|------------|:---------------:|------------------------|
+| **E1** | Revisions & Numbering | Verified | Fully tracked-deleted paragraphs are skipped from `[p:N]` numbering to keep live indices identical to headless. Table paragraphs are addressed exclusively by `[table:N]`. |
+| **E2** | Backup Copy | Verified | `shutil.copy2` reliably copies `.docx` files while open in Word on Windows (`FILE_SHARE_READ` granted). |
+| **E3** | Lock File Naming | Verified | Word creates `~$<filename>` owner lock files. Used as safety net to reject mutating writes when Word is running elevated or in an unattached instance. |
+| **E4** | Running Object Table (ROT) | Skipped | Enumerating ROT for multiple instances is complex and brittle across Office versions. Lock-file safety net provides full write protection instead. |
+| **E5** | Single Undo Record | Verified | Wrapping COM operations in `doc.Application.UndoRecord` reliably coalesces complex multi-step edits into a single `Ctrl + Z` step. |
+| **E6** | Performance Budget (2.0s) | Passed (0.433s) | Outline extraction across 1,000 paragraphs with tables completed in 0.433s (<2.0s budget) by querying `doc.Tables` and `doc.GetCrossReferenceItems(1)` in bulk rather than looping per-paragraph COM properties. |
+| **E7** | Revision Author | Not Adopted | Setting `Application.UserName` alters global Word user preferences across sessions with risk of leaving modified user state on unexpected process exit. Retained Word's default user author identity. |
+| **E8** | `InsertXML` Spike | Not Adopted | COM `Range.InsertXML` produced styling discrepancies and unpredictable undo/track-changes grouping compared to direct COM DOM manipulation. Direct COM manipulation adopted for all tools. |
+
+---
+
+## 6. Test Suite & Verification Metrics
 
 ```text
-============================= 55 passed in 14.34s =============================
+With Microsoft Word running: 55 passed in 14.34s
+With Microsoft Word closed:  42 passed, 13 skipped
 ```
 
 | Suite | File | Tests | Status | Scope |
 |-------|------|:-----:|:------:|-------|
-| Core Headless | [`tests/test_mutations.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_mutations.py) | 3 | **PASSED** | Batch composition, XML paragraph mutations, find-and-replace |
-| Advanced Headless | [`tests/test_new_tools.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_new_tools.py) | 30 | **PASSED** | Path normalization, page layout, style order, tables, hygiene |
-| COM Worker | [`tests/test_live_worker.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_worker.py) | 9 | **PASSED** | Timeouts, poisoned state, thread preservation, lock detection |
-| Live Integration | [`tests/test_live_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_engine.py) | 12 | **PASSED** | Live open/close, outline, mutations, undo, compose, layout, styles, tables, cleanup |
-| Parity Verification | [`tests/test_gate_2_parity.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_gate_2_parity.py) | 1 | **PASSED** | End-to-end parity validation across all 8 tools |
+| Core Headless | [`tests/test_mutations.py`](tests/test_mutations.py) | 3 | **PASSED** | Batch composition, XML paragraph mutations, find-and-replace |
+| Advanced Headless | [`tests/test_new_tools.py`](tests/test_new_tools.py) | 30 | **PASSED** | Path normalization, page layout, style order, tables, hygiene |
+| COM Worker | [`tests/test_live_worker.py`](tests/test_live_worker.py) | 9 | **PASSED** | Timeouts, poisoned state, thread preservation, lock detection |
+| Live Integration | [`tests/test_live_engine.py`](tests/test_live_engine.py) | 12 | **PASSED** | Live open/close, outline, mutations, undo, compose, layout, styles, tables, cleanup |
+| Parity Verification | [`tests/test_gate_2_parity.py`](tests/test_gate_2_parity.py) | 1 | **PASSED** | End-to-end parity validation across all 8 tools on `academic-id.yaml` |
 
 ---
 
-## 6. Git Health & Workspace Hygiene
+## 7. Gate Status & Human Sign-off Verification
 
-* **Working Tree:** Cleaned and ready for public commit.
-* **Ignored Scratch:** `scratch/` directory is tracked via `scratch/.gitkeep`, while all scratchpad contents (`scratch/*`) are gitignored.
-* **Excluded Auxiliary Info:** `.agent-info/` is excluded locally (`.git/info/exclude` and `.gitignore`) and removed from tracked files.
-* **Isolated Feature Branch:** All work resides on `feat/live-word-backend`.
-* **Pull Request:** Draft PR #2 created (`https://github.com/TheBarli/MsWord-ai-integration/pull/2`).
+| Gate | Description | Type | Status | Details / Actions |
+|------|-------------|:----:|:------:|-------------------|
+| **Gate 0** | Preparation & COM Worker Safety | Automated | **PASSED** | Worker unit tests pass; `HAS_COM=False` headless fallback verified. |
+| **Gate 1** | Interactive Live Checklist | **[HUMAN]** | **PENDING USER SIGN-OFF** | Requires user verification in active Word session on `documents/live_test.docx`: (1) edit appears within ~1s, (2) single Ctrl+Z undo, (3) tracked change displayed, (4) headless fallback on close, (5) out-of-range clean error, (6) modal dialog timeout and recovery. |
+| **Gate 2** | Tool Parity Comparison | Automated | **PASSED** | `academic-id.yaml` pipeline executed live and headless on identical input; metadata, layout, and styles match. |
+| **Gate 3** | Full Test Parity & Dry Run | Automated | **PASSED** | 55 automated tests passing with Word open; 13 skipped when Word closed; `dry_run` verified. |
+| **Gate 4** | Final Launch & Merge Review | **[HUMAN]** | **PENDING USER SIGN-OFF** | User review of Draft PR #2, documentation, rules, and skills before merging to `master`. |
+
+### Gate 1 [HUMAN] Checklist (For User Sign-off)
+Before merging to `master`, run through this live checklist with `documents/live_test.docx` open in Word:
+- [ ] 1. Edit appears on screen within ~1 second.
+- [ ] 2. `Ctrl + Z` undoes exactly one agent tool call.
+- [ ] 3. The edit appears as a tracked change that can be accepted or rejected in Word.
+- [ ] 4. After closing Word, the same tool call works headless without errors.
+- [ ] 5. A deliberately wrong index (e.g., `[p:9999]`) returns a clear out-of-range message without crashing.
+- [ ] 6. Triggering a tool call while a Word modal dialog (such as *Save As*) is open returns a dialog timeout error within 20s, and the subsequent call succeeds once the dialog is dismissed.
 
 ---
 
-## 7. Operational Readiness
+## 8. Git Health & PR Status
 
-All live Word backend features, documentation, behavioral rules, and test suites are complete. The workspace is fully prepped for public commit and review.
+* **Branch:** `feat/live-word-backend`
+* **Draft PR:** #2 (`https://github.com/TheBarli/MsWord-ai-integration/pull/2`)
+* **Scratch Directory:** `scratch/` tracked via `scratch/.gitkeep`; contents (`scratch/*`) gitignored.
+* **Auxiliary Information:** `.agent-info/` excluded locally in `.git/info/exclude` and `.gitignore`, untracked from Git.
+* **Working Tree:** Clean. Commits held locally; awaiting user review before push/merge.

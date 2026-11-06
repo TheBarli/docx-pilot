@@ -23,44 +23,49 @@ This workspace solves those problems using three foundational pillars:
 ```text
 MsWord-ai-integration/
 ├── .agents/                                # Antigravity agent configuration & presets
+│   ├── mcp_config.json                     # Portable workspace-level MCP registration
 │   ├── presets/                            # Standardized document formatting profiles (YAML)
 │   │   ├── academic-id.yaml                # Standard Indonesian academic format (A4, 4-4-3-3 cm)
 │   │   ├── academic-id-advanced.yaml       # Advanced academic preset with H1–H5 & pagination
 │   │   └── clean-uniform.yaml              # General business clean styling profile
 │   ├── rules/                              # Agent behavior and orchestration rules
 │   │   ├── document-styling.md             # Rule orchestrating the 5-step styling pipeline
+│   │   ├── live-word-mode.md               # Rule governing live Word backend usage & constraints
 │   │   └── [local dev rules excluded]      # Git, GH, and debugging rules via .git/info/exclude
-│   └── mcp_config.json                     # Portable workspace-level MCP registration
-├── .agent-info/                            # Persistent research, historical plans & audit notes
-│   ├── docs/                               # Analysis, architecture plans, reviews
-│   │   ├── analysis/                       # Deep-dive root-cause analyses on document bloat
-│   │   ├── plans/                          # Execution plans (including github-launch-plan.md)
-│   │   └── reviews/                        # Historical document review records
-│   ├── pipelines/                          # Archived standalone reference automation scripts
-│   └── README.md                           # Documentation guide for auxiliary files
+│   └── skills/
+│       └── live-word-editing/              # Skill containing live editing workflow & error triage
 ├── documents/                              # Dedicated working folder for input/output .docx files
+│   ├── .backups/                           # Automatic pre-mutation safety backups (latest 20 retained)
 │   └── .gitkeep                            # Keeps directory tracked while ignoring binary docs
+├── scratch/                                # Scratchpad scripts and temporary data (gitignored)
+│   └── .gitkeep                            # Keeps directory tracked in repository
 ├── src/                                    # Server application source code
 │   ├── __init__.py                         # Package declaration
 │   ├── oxml_engine.py                      # Core python-docx + lxml DOM manipulation engine
+│   ├── live_engine.py                      # Live Microsoft Word COM backend & worker thread
 │   └── server.py                           # FastMCP server entry point exporting the 8 tools
 ├── tests/                                  # Pytest automated verification suite
 │   ├── __init__.py
 │   ├── test_mutations.py                   # Tests for compose, read, and low-level DOM mutations
-│   └── test_new_tools.py                   # Tests for page layout, styles, tables, and hygiene
+│   ├── test_new_tools.py                   # Tests for page layout, styles, tables, and hygiene
+│   ├── test_live_worker.py                 # Single-threaded COM worker, timeouts, and state safety
+│   ├── test_live_engine.py                 # Live Word COM integration tests (12 tests)
+│   └── test_gate_2_parity.py               # End-to-end parity test across both backends
 ├── .gitignore                              # Git exclusions (binaries, caches, scratch files)
 ├── .python-version                         # Pinned Python version (3.11.9)
 ├── demo.py                                 # Self-contained end-to-end demo script
+├── pytest.ini                              # Pytest configuration and live test marker registration
 ├── requirements.txt                        # Pinned production and test dependencies
 ├── README.md                               # Public-facing repository documentation
-└── WORKSPACE.md                            # Comprehensive workspace architecture guide
+├── WORKSPACE.md                            # Comprehensive workspace architecture guide
+└── WORKSPACE_REVIEW.md                     # Workspace audit and gate verification status
 ```
 
 ---
 
 ## 3. Core Engine Architecture (`src/`)
 
-### [`src/oxml_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/oxml_engine.py)
+### [`src/oxml_engine.py`](src/oxml_engine.py)
 The foundational engine powering all document transformations. Key features include:
 - **`normalize_path(file_path)`**: Smart multi-candidate path resolver supporting absolute paths, paths relative to the current working directory, and paths relative to the project root.
 - **ECMA-376 Schema Sorting**:
@@ -70,8 +75,15 @@ The foundational engine powering all document transformations. Key features incl
   - `reorder_children(parent, order_list)`: Sorts XML child tags in-place according to the ECMA-376 specification to eliminate "repaired content" warnings.
 - **`DocxEngine` Class**: Static methods encapsulating all document read, compose, mutate, layout, style, table, and cleanup operations.
 
-### [`src/server.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py)
-The FastMCP entry point running over standard I/O (`stdio`). It sets the working directory to `PROJECT_ROOT` and exposes the 8 MCP tools.
+### [`src/live_engine.py`](src/live_engine.py)
+The live COM bridge engine connecting directly to an active Microsoft Word desktop session:
+- **`LiveWordEngine` Class**: Static methods implementing live COM equivalents for all 8 MCP tools.
+- **`ComWorker`**: Single-threaded STA worker thread ensuring COM apartments and calls never cross thread boundaries or deadlock on async loops.
+- **UndoRecord Wrapper**: Groups complex multi-step COM mutations into a single `Application.UndoRecord` so every tool call can be rolled back with one `Ctrl + Z`.
+- **Visual Track Changes**: Forces `doc.TrackRevisions = True` for content additions, modifications, and deletions.
+
+### [`src/server.py`](src/server.py)
+The FastMCP entry point running over standard I/O (`stdio`). It sets the working directory to `PROJECT_ROOT`, manages automatic document backups, dynamically routes calls between headless and live backends via `pick_backend()`, and exposes the 8 MCP tools.
 
 ---
 
@@ -79,14 +91,14 @@ The FastMCP entry point running over standard I/O (`stdio`). It sets the working
 
 | # | Tool Name | Primary Purpose | Key Parameters |
 |---|-----------|-----------------|----------------|
-| 1 | [`read_document`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py#L32) | Inspect document structure, outline, tables, or metadata | `file_path`, `mode` (`"outline"`, `"full"`, `"table"`, `"metadata"`), `table_index` |
-| 2 | [`compose_document`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py#L58) | Batch creation of headings, paragraphs, lists, tables, and page breaks | `file_path`, `actions` (list of element dicts), `create_if_missing` |
-| 3 | [`mutate_element`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py#L82) | Surgical DOM insertions, deletions, or in-place replacements at `[p:N]` | `file_path`, `target_index`, `action` (`"insert_before"`, `"insert_after"`, `"delete"`, `"replace"`), `content` |
-| 4 | [`find_and_replace`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py#L107) | Text search-and-replace preserving run formatting across paragraphs and tables | `file_path`, `find_text`, `replace_text`, `match_case`, `scope` |
-| 5 | [`set_page_layout`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py#L131) | Applies margins and paper size to **all** `<w:sectPr>` elements in the XML | `file_path`, `top_cm`, `bottom_cm`, `left_cm`, `right_cm`, `page_size`, `orientation` |
-| 6 | [`update_styles`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py#L163) | Configures font family, font size, line spacing, spacing, and keepNext in `word/styles.xml` | `file_path`, `styles_config` (mapping of style names to formatting attributes) |
-| 7 | [`format_table_grid`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py#L182) | Normalizes table borders, header shading, cell padding, `cantSplit`, and `tblHeader` | `file_path`, `table_indices`, `border_sz`, `border_color`, `header_shading`, `cant_split`, `repeat_header`, `font_name`, `font_size_pt` |
-| 8 | [`clean_structure`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/server.py#L225) | Removes empty paragraphs, empty tables, extracts single-image tables, and caps breaks | `file_path`, `remove_empty_paragraphs`, `remove_empty_tables`, `extract_single_image_tables`, `max_consecutive_breaks`, `normalize_all_colors_black` |
+| 1 | [`read_document`](src/server.py) | Inspect document structure, outline, tables, or metadata | `file_path`, `mode` (`"outline"`, `"full"`, `"table"`, `"metadata"`), `table_index` |
+| 2 | [`compose_document`](src/server.py) | Batch creation of headings, paragraphs, lists, tables, and page breaks | `file_path`, `actions` (list of element dicts), `create_if_missing` |
+| 3 | [`mutate_element`](src/server.py) | Surgical DOM insertions, deletions, or in-place replacements at `[p:N]` | `file_path`, `target_index`, `action` (`"insert_before"`, `"insert_after"`, `"delete"`, `"replace"`), `content` |
+| 4 | [`find_and_replace`](src/server.py) | Text search-and-replace preserving run formatting across paragraphs and tables | `file_path`, `find_text`, `replace_text`, `match_case`, `scope` |
+| 5 | [`set_page_layout`](src/server.py) | Applies margins and paper size to **all** `<w:sectPr>` elements in the XML | `file_path`, `top_cm`, `bottom_cm`, `left_cm`, `right_cm`, `page_size`, `orientation` |
+| 6 | [`update_styles`](src/server.py) | Configures font family, font size, line spacing, spacing, and keepNext in `word/styles.xml` | `file_path`, `styles_config` (mapping of style names to formatting attributes) |
+| 7 | [`format_table_grid`](src/server.py) | Normalizes table borders, header shading, cell padding, `cantSplit`, and `tblHeader` | `file_path`, `table_indices`, `border_sz`, `border_color`, `header_shading`, `cant_split`, `repeat_header`, `font_name`, `font_size_pt` |
+| 8 | [`clean_structure`](src/server.py) | Removes empty paragraphs, empty tables, extracts single-image tables, and caps breaks | `file_path`, `remove_empty_paragraphs`, `remove_empty_tables`, `extract_single_image_tables`, `max_consecutive_breaks`, `normalize_all_colors_black`, `dry_run` |
 
 ---
 
@@ -94,7 +106,7 @@ The FastMCP entry point running over standard I/O (`stdio`). It sets the working
 
 Formatting configurations are defined in portable YAML presets that map directly to the parameters of the MCP styling tools:
 
-1. **[`academic-id.yaml`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/presets/academic-id.yaml)**:
+1. **[`academic-id.yaml`](.agents/presets/academic-id.yaml)**:
    - Paper Size: **A4** (210 × 297 mm) portrait.
    - Margins: **4.0 cm top, 3.0 cm bottom, 4.0 cm left, 3.0 cm right** (Indonesian standard).
    - Typography: Times New Roman 12pt, 1.5 line spacing, justified, 0pt space after.
@@ -102,14 +114,14 @@ Formatting configurations are defined in portable YAML presets that map directly
    - Tables: 0.5pt black border, `F2F2F2` header fill, row anti-split enabled.
    - Hygiene: Full structural cleanup enabled, black font color normalization.
 
-2. **[`academic-id-advanced.yaml`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/presets/academic-id-advanced.yaml)**:
+2. **[`academic-id-advanced.yaml`](.agents/presets/academic-id-advanced.yaml)**:
    - Extends the base academic preset with fine-grained hierarchy (H1 through H5), bullet list indent control, and pagination management.
 
-3. **[`clean-uniform.yaml`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/presets/clean-uniform.yaml)**:
+3. **[`clean-uniform.yaml`](.agents/presets/clean-uniform.yaml)**:
    - General corporate/modern document profile with uniform 2.54 cm (1 inch) margins and Calibri typography.
 
 ### Orchestration Sequence
-When formatting documents using presets, the agent follows the pipeline defined in [`.agents/rules/document-styling.md`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/rules/document-styling.md):
+When formatting documents using presets, the agent follows the pipeline defined in [`.agents/rules/document-styling.md`](.agents/rules/document-styling.md):
 ```text
 1. set_page_layout  -->  Apply page size, orientation, and margins across all sections
 2. update_styles    -->  Update word/styles.xml with fonts, line spacing, and keepNext
@@ -124,12 +136,12 @@ When formatting documents using presets, the agent follows the pipeline defined 
 
 The server supports transparent dual-backend operation:
 
-1. **Headless Engine ([`src/oxml_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/oxml_engine.py))**:
+1. **Headless Engine ([`src/oxml_engine.py`](src/oxml_engine.py))**:
    - Operates on static files on disk via `python-docx` and `lxml`.
    - Low-level XML tree mutations with strict ECMA-376 schema ordering.
    - Non-destructive `dry_run: bool = False` for structural hygiene.
 
-2. **Live Microsoft Word Engine ([`src/live_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/src/live_engine.py))**:
+2. **Live Microsoft Word Engine ([`src/live_engine.py`](src/live_engine.py))**:
    - Automatically detects if the document is active in Microsoft Word using `GetActiveObject("Word.Application")`.
    - Interacts live via Windows COM with zero external window spawning (Rule C4).
    - Groups multi-step actions inside Word's `Application.UndoRecord` so **every tool call can be rolled back with a single `Ctrl + Z`** (Rule C5).
@@ -140,13 +152,18 @@ The server supports transparent dual-backend operation:
 3. **Automatic Safety Backups**:
    - Before any mutating tool execution, a timestamped copy is saved to `documents/.backups/`.
    - Automatically rotates and retains the latest `BACKUP_KEEP = 20` copies per file stem.
+   - **Limitation note:** Backups copy the on-disk file. Any unsaved edits made in an open Word session prior to the agent call are not captured in the backup until saved to disk by the user.
+
+4. **Scope & Tool Limitations**:
+   - `find_and_replace`: Searches body text, tables, and headers/footers (`scope="all"` or `scope="headers_footers"`). Footnotes and endnotes are not searched.
+   - `dry_run`: Supported on `clean_structure`; not supported on `find_and_replace`.
 
 ---
 
 ## 7. Antigravity IDE Integration & Local Setup
 
 ### Workspace Configuration
-The workspace is pre-configured with [`.agents/mcp_config.json`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/mcp_config.json):
+The workspace is pre-configured with [`.agents/mcp_config.json`](.agents/mcp_config.json):
 ```json
 {
   "mcpServers": {
@@ -163,13 +180,13 @@ The workspace is pre-configured with [`.agents/mcp_config.json`](file:///c:/User
 When opened in Antigravity IDE, the `word-docx` server is automatically recognized and loaded into the agent's toolset.
 
 ### Rules & Skills
-- **Rule [`live-word-mode`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/rules/live-word-mode.md)**: Governs live vs headless tool invariants, outline reuse, and safety constraints.
-- **Rule [`document-styling`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/rules/document-styling.md)**: Enforces the 5-step preset styling pipeline.
-- **Skill [`live-word-editing`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.agents/skills/live-word-editing/SKILL.md)**: Procedure and error catalog lookup for interactive live editing.
+- **Rule [`live-word-mode`](.agents/rules/live-word-mode.md)**: Governs live vs headless tool invariants, outline reuse, and safety constraints.
+- **Rule [`document-styling`](.agents/rules/document-styling.md)**: Enforces the 5-step preset styling pipeline.
+- **Skill [`live-word-editing`](.agents/skills/live-word-editing/SKILL.md)**: Procedure and error catalog lookup for interactive live editing.
 
 ### Python Environment
-- Python version is pinned to **3.11.9** via [`.python-version`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/.python-version).
-- Production dependencies in [`requirements.txt`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/requirements.txt):
+- Python version is pinned to **3.11.9** via [`.python-version`](.python-version).
+- Production dependencies in [`requirements.txt`](requirements.txt):
   - `fastmcp>=4.0.0`
   - `python-docx>=1.2.0`
   - `pydantic>=2.0.0`
@@ -181,7 +198,9 @@ When opened in Antigravity IDE, the `word-docx` server is automatically recogniz
 
 ## 8. Testing & Quality Assurance
 
-The codebase maintains 100% passing test coverage across 55 automated test cases:
+Test execution behavior:
+- **With Word running:** 55 passed (42 headless, 13 live tests).
+- **With Word closed:** 42 passed, 13 live tests skipped.
 
 ```powershell
 # Run headless tests (no Word required)
@@ -192,19 +211,18 @@ The codebase maintains 100% passing test coverage across 55 automated test cases
 ```
 
 ### Test Suites:
-- **[`tests/test_mutations.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_mutations.py)**: Headless batch creation, reading, and XML paragraph mutations.
-- **[`tests/test_new_tools.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_new_tools.py)**: Headless layout, styles, table formatting, and structural hygiene with dry_run.
-- **[`tests/test_live_worker.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_worker.py)**: Single-threaded COM worker isolation, timeouts, poisoned state, path matching, and lock file detection.
-- **[`tests/test_live_engine.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_live_engine.py)**: 12 live COM tests verifying all 8 tools, single-step UndoRecord, and Track Changes.
-- **[`tests/test_gate_2_parity.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/tests/test_gate_2_parity.py)**: Full end-to-end parity test executing `academic-id.yaml` styling pipeline across both backends on identical input.
+- **[`tests/test_mutations.py`](tests/test_mutations.py)**: Headless batch creation, reading, and XML paragraph mutations (3 tests).
+- **[`tests/test_new_tools.py`](tests/test_new_tools.py)**: Headless layout, styles, table formatting, and structural hygiene with dry_run (30 tests).
+- **[`tests/test_live_worker.py`](tests/test_live_worker.py)**: Single-threaded COM worker isolation, timeouts, poisoned state, path matching, and lock file detection (9 tests).
+- **[`tests/test_live_engine.py`](tests/test_live_engine.py)**: 12 live COM tests verifying all 8 tools, single-step UndoRecord, and Track Changes.
+- **[`tests/test_gate_2_parity.py`](tests/test_gate_2_parity.py)**: Full end-to-end parity test executing `academic-id.yaml` styling pipeline across both backends on identical input (1 test).
 
 ---
 
 ## 9. Practical Demo
 
-To see the server and engine in action end-to-end, execute [`demo.py`](file:///c:/Users/levine/Documents/Github/MsWord-ai-integration/demo.py):
+To see the server and engine in action end-to-end, execute [`demo.py`](demo.py):
 ```powershell
 .venv\Scripts\python.exe demo.py
 ```
 This script creates a rich formatted document in `documents/demo_document.docx`, inspects the 0-based outline, inserts content via low-level XML manipulation, executes targeted find-and-replace, and verifies the final structure.
-
