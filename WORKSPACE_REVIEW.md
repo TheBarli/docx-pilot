@@ -4,7 +4,7 @@
 **Current Branch:** `feat/live-word-backend`  
 **Base Tracking:** `origin/refactor/mcp-and-directory-cleanup` (Default: `origin/master`)  
 **Environment:** Python 3.11.9 (`.venv`), FastMCP 4.0+, Windows COM (`pywin32` 312)  
-**Status:** **Phases 0–2 and 4 implemented; Phase 3 partial (see Known Limitations) | Automated Gates 0, 2, 3 Passed | 59 Passed with Word Running (17 Skipped When Word Closed) | Pending Human Gates 1 & 4**
+**Status:** **Phases 0–2 and 4 implemented; Phase 3 partial (see Known Limitations) | Automated Gates 0, 2, 3 Passed | 59 Passed with Word Running (17 Skipped When Word Closed) | Pending Human Gate 4**
 
 ---
 
