@@ -79,6 +79,7 @@ Tool Invocation (file_path)
           ▼
    pick_backend()
    ├── 1. Env WORD_BACKEND == "headless" ────────────────────────► Headless
+   │      (WORD_BACKEND="live" forces live and raises LiveWordError if not open; see WORKSPACE.md §6)
    ├── 2. pywin32 missing OR Word inactive ──► Check lock file ──► Headless (or reject mutating)
    ├── 3. Document found in Word.Application.Documents ──────────► Live COM
    ├── 4. Document in ProtectedViewWindows ──────────────────────► Raise LiveWordError
@@ -109,7 +110,7 @@ Tool Invocation (file_path)
 | 1 | `read_document` | ✅ Full (`outline`, `full`, `table`, `metadata`) | ✅ Full (`outline`, `full`, `table`, `metadata`) | Read-only | 0-based structural dump and outline inspection (bulk range query) |
 | 2 | `compose_document` | ✅ Batch writer | ✅ Full COM Batch Writer | Tracked | Sequential creation of headings, paragraphs, lists, tables, and page breaks |
 | 3 | `mutate_element` | ✅ Low-level XML DOM | ✅ COM Range DOM | Tracked | Surgical `insert_before`, `insert_after`, `replace`, `delete` |
-| 4 | `find_and_replace` | ✅ Scoped search | ✅ Locate-then-set | Tracked | Search & replace; skips deletions, unconstrained replacements |
+| 4 | `find_and_replace` | ✅ Scoped search | ✅ Locate-then-set | Tracked | Search and replace in body, tables, headers/footers; skips tracked deletions |
 | 5 | `set_page_layout` | ✅ All `<w:sectPr>` sections | ✅ COM PageSetup | Untracked | Sets margins, orientation, paper size (A4, Letter, Legal) across sections |
 | 6 | `update_styles` | ✅ ECMA-376 schema order | ✅ COM Styles | Untracked | Updates fonts, sizes, bold, colors, line spacing, space before/after, and `keepNext` |
 | 7 | `format_table_grid` | ✅ XML table borders & fills | ✅ COM Table Borders & Fills | Untracked | Standardizes borders, padding, `#E8ECEF` header shading, `cantSplit`, `tblHeader` |
@@ -119,7 +120,7 @@ Tool Invocation (file_path)
 * **`find_and_replace` Scope:** Searches document body, tables, and headers/footers (`scope="all"`, `"body"`, `"tables"`, `"headers_footers"`). Footnotes and endnotes are not searched.
 * **`find_and_replace` Dry Run:** `dry_run` is not supported on `find_and_replace` (supported only on `clean_structure`).
 * **Replace Formatting:** In live mode, text replacement via `Range.Text` inherits the formatting of the first character of the replaced range.
-* **Multiple Word Instances:** Detection attaches to the instance returned by `GetActiveObject`. If Word is running in multiple separate process instances, documents in secondary instances trigger the lock-file safety net rather than direct COM attachment.
+* **Multiple Word Instances:** Detection attaches to the instance returned by `GetActiveObject`. If Word is running in multiple separate process instances, documents in secondary instances typically trigger the best-effort lock-file safety net rather than direct COM attachment.
 
 ---
 
@@ -129,10 +130,10 @@ Tool Invocation (file_path)
 |------------|------------|:---------------:|------------------------|
 | **E1** | Revisions & Numbering | Verified | Fully tracked-deleted paragraphs are skipped from `[p:N]` numbering to keep live indices identical to headless. Table paragraphs are addressed exclusively by `[table:N]`. |
 | **E2** | Backup Copy | Verified | `shutil.copy2` reliably copies `.docx` files while open in Word on Windows (`FILE_SHARE_READ` granted). |
-| **E3** | Lock File Naming | Verified | Word creates `~$<filename>` owner lock files. Used as safety net to reject mutating writes when Word is running elevated or in an unattached instance. |
+| **E3** | Lock File Naming | Verified | Word creates owner lock files (`~$<filename>` for short names, or replacing the first two characters with `~$` for longer names, e.g. `~$ve_test.docx`). Used as a best-effort safety net to reject mutating writes when Word is running elevated or in an unattached instance. |
 | **E4** | Running Object Table (ROT) | Skipped | Enumerating ROT for multiple instances is complex and brittle across Office versions. The lock-file safety net blocks writes in most cases where Word has the file open but the instance cannot be attached (for example elevated Word or a second instance). It cannot protect a file Word has open without creating a lock file. |
 | **E5** | Single Undo Record | Verified | Wrapping COM operations in `doc.Application.UndoRecord` reliably coalesces complex multi-step edits into a single `Ctrl + Z` step. |
-| **E6** | Performance Budget (2.0s) | Passed (0.433s) | Outline extraction across 1,000 paragraphs with tables completed in 0.433s (<2.0s budget) by querying `doc.Tables` and `doc.GetCrossReferenceItems(1)` in bulk rather than looping per-paragraph COM properties. |
+| **E6** | Performance Budget (2.0s) | Passed (1.652s) | Outline extraction across 1,000 paragraphs completed in 1.652s (<2.0s budget). Live outline follows the headless document-order rule with body paragraph threshold `OUTLINE_LINE_LIMIT = 40`, leveraging `doc.GetCrossReferenceItems(1)` to index headings in bulk. |
 | **E7** | Revision Author | Not Adopted | Setting `Application.UserName` alters global Word user preferences across sessions with risk of leaving modified user state on unexpected process exit. Retained Word's default user author identity. |
 | **E8** | `InsertXML` Spike | Not Adopted | COM `Range.InsertXML` produced styling discrepancies and unpredictable undo/track-changes grouping compared to direct COM DOM manipulation. Direct COM manipulation adopted for all tools. |
 
@@ -163,7 +164,7 @@ With Microsoft Word closed:  42 passed, 17 skipped
 | **Gate 0** | Preparation & COM Worker Safety | Automated | **PASSED** | Worker unit tests pass; `HAS_COM=False` headless fallback verified. |
 | **Gate 1** | Interactive Live Checklist | **[HUMAN]** | **PENDING USER SIGN-OFF** | Requires user verification in active Word session on `documents/live_test.docx`: (1) edit appears within ~1s, (2) single Ctrl+Z undo, (3) tracked change displayed, (4) headless fallback on close, (5) out-of-range clean error, (6) modal dialog timeout and recovery. |
 | **Gate 2** | Tool Parity Comparison | Automated | **PASSED** | `academic-id.yaml` pipeline executed live and headless on identical input; metadata, layout, and styles match. |
-| **Gate 3** | Full Test Parity & Dry Run | Automated | **PASSED** | Automated tests passing with Word open (13 skipped when Word closed); `dry_run` verified on `clean_structure` only. |
+| **Gate 3** | Full Test Parity & Dry Run | Automated | **PASSED (scoped: `dry_run` on `clean_structure` only)** | Automated tests passing with Word open (17 skipped when Word closed); `dry_run` verified on `clean_structure` only. |
 | **Gate 4** | Final Launch & Merge Review | **[HUMAN]** | **PENDING USER SIGN-OFF** | User review of Draft PR #2, documentation, rules, and skills before merging to `master`. |
 
 ### Gate 1 [HUMAN] Checklist (For User Sign-off)
