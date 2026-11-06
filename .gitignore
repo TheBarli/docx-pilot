@@ -27,8 +27,9 @@ documents/*
 documents/.backups/
 documents/live_test.docx
 
-# Root scratch directory
-scratch/
+# Root scratch directory contents
+scratch/*
+!scratch/.gitkeep
 
-# Agent internal scratch & ephemeral notes
-.agent-info/scratch/
+# Agent internal notes, research, and workspace artifacts
+.agent-info/
