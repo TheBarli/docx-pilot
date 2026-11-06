@@ -31,5 +31,10 @@ documents/live_test.docx
 scratch/*
 !scratch/.gitkeep
 
+# Editor & IDE metadata
+.obsidian/
+.vscode/
+.idea/
+
 # Agent internal notes, research, and workspace artifacts
 .agent-info/
