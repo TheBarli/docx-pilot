@@ -44,9 +44,12 @@ docx-pilot/
 │   └── .gitkeep                            # Tracked to preserve folder structure
 ├── src/                                    # Server and engine implementations
 │   ├── __init__.py                         # Package declaration
-│   ├── server.py                           # FastMCP server entry point (8 tools, backend routing, backups)
-│   ├── oxml_engine.py                      # Headless python-docx + low-level lxml engine
-│   └── live_engine.py                      # Live COM engine, worker thread, routing, undo/track
+│   ├── core/                               # Core shared infrastructure (constants, exceptions, paths)
+│   ├── headless/                           # Headless python-docx + lxml engine (xml_helpers, tools_*)
+│   ├── live/                               # Live COM engine (worker, undo, router, indexer, tools_*)
+│   ├── oxml_engine.py                      # Headless backward-compatibility facade
+│   ├── live_engine.py                      # Live COM backward-compatibility facade
+│   └── server.py                           # FastMCP server entry point (8 tools, backend routing, backups)
 ├── tests/                                  # Pytest automated test suites
 │   ├── __init__.py
 │   ├── test_mutations.py                   # Core headless batch composition & DOM mutation tests (3 tests)

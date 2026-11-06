@@ -44,8 +44,30 @@ docx-pilot/
 │   └── .gitkeep                            # Keeps directory tracked in repository
 ├── src/                                    # Server application source code
 │   ├── __init__.py                         # Package declaration
-│   ├── oxml_engine.py                      # Core python-docx + lxml DOM manipulation engine
-│   ├── live_engine.py                      # Live Microsoft Word COM backend & worker thread
+│   ├── core/                               # Core shared infrastructure
+│   │   ├── __init__.py
+│   │   ├── constants.py                    # Schema ordering, namespaces, limits, PROJECT_ROOT
+│   │   ├── exceptions.py                   # LiveWordError & error message catalog
+│   │   └── paths.py                        # Multi-candidate path normalization
+│   ├── headless/                           # OpenXML headless engine (python-docx + lxml)
+│   │   ├── __init__.py
+│   │   ├── xml_helpers.py                  # ECMA-376 schema sort & document creation
+│   │   ├── tools_read.py                   # read_document headless mixin
+│   │   ├── tools_edit.py                   # compose, mutate, find_and_replace, debloat mixin
+│   │   ├── tools_format.py                 # page layout, styles, tables, cleanup mixin
+│   │   └── engine.py                       # DocxEngine assembling mixins
+│   ├── live/                               # Live Microsoft Word COM backend
+│   │   ├── __init__.py
+│   │   ├── worker.py                       # STA ComWorker thread & com_worker singleton
+│   │   ├── undo.py                         # UndoRecord & live_call context managers
+│   │   ├── router.py                       # Backend detection & pick_backend routing
+│   │   ├── indexer.py                      # 0-based coordinate indexing & outline helpers
+│   │   ├── tools_read.py                   # read_document COM mixin
+│   │   ├── tools_edit.py                   # compose, mutate, find_and_replace COM mixin
+│   │   ├── tools_format.py                 # page layout, styles, tables, cleanup COM mixin
+│   │   └── engine.py                       # LiveWordEngine assembling mixins
+│   ├── oxml_engine.py                      # Backward-compatibility facade for headless engine
+│   ├── live_engine.py                      # Backward-compatibility facade for live engine
 │   └── server.py                           # FastMCP server entry point exporting the 8 tools
 ├── tests/                                  # Pytest automated verification suite
 │   ├── __init__.py
@@ -69,24 +91,35 @@ docx-pilot/
 
 ## 3. Core Engine Architecture (`src/`)
 
-### [`src/oxml_engine.py`](src/oxml_engine.py)
-The foundational engine powering all document transformations. Key features include:
-- **`normalize_path(file_path)`**: Smart multi-candidate path resolver supporting absolute paths, paths relative to the current working directory, and paths relative to the project root.
-- **ECMA-376 Schema Sorting**:
-  - `STYLE_ORDER`: Valid child element ordering for `<w:style>`.
-  - `PPR_ORDER`: Sequence ordering for paragraph properties (`<w:pPr>`), e.g., `pStyle`, `keepNext`, `spacing`, `ind`, `jc`.
-  - `RPR_ORDER`: Sequence ordering for run properties (`<w:rPr>`), e.g., `rFonts`, `b`, `i`, `color`, `sz`.
-  - `reorder_children(parent, order_list)`: Sorts XML child tags in-place according to the ECMA-376 specification to eliminate "repaired content" warnings.
-- **`DocxEngine` Class**: Static methods encapsulating all document read, compose, mutate, layout, style, table, and cleanup operations.
+The engine source is organized into modular packages targeting $\le 500$ lines per file, with backward-compatibility facades at the root of `src/`.
 
-### [`src/live_engine.py`](src/live_engine.py)
-The live COM bridge engine connecting directly to an active Microsoft Word desktop session:
-- **`LiveWordEngine` Class**: Static methods implementing live COM equivalents for all 8 MCP tools.
-- **`ComWorker`**: Single-threaded STA worker thread ensuring COM apartments and calls never cross thread boundaries or deadlock on async loops.
-- **UndoRecord Wrapper**: Groups complex multi-step COM mutations into a single `Application.UndoRecord` so every tool call can be rolled back with one `Ctrl + Z`.
-- **Visual Track Changes**: Forces `doc.TrackRevisions = True` for content additions, modifications, and deletions.
+### Shared Infrastructure (`src/core/`)
+- **`constants.py`**: ECMA-376 schema child ordering sequences (`STYLE_ORDER`, `PPR_ORDER`, `RPR_ORDER`), XML namespaces (`W_NS`), outline truncation limit (`OUTLINE_LINE_LIMIT`), and dynamic `PROJECT_ROOT` detection.
+- **`exceptions.py`**: `LiveWordError` hierarchy and centralized `ERROR_MESSAGES` catalog.
+- **`paths.py`**: Multi-candidate path normalizer (`normalize_path`, `_norm`, `paths_match`) supporting absolute paths, working-directory relative paths, and project-root relative paths.
 
-### [`src/server.py`](src/server.py)
+### Headless OpenXML Backend (`src/headless/`)
+- **`xml_helpers.py`**: ECMA-376 schema sorting (`reorder_children`) and document initialization (`get_or_create_document`).
+- **`tools_read.py` (`ReadTools`)**: Headless `read_document` implementing outline, full, table, and metadata modes.
+- **`tools_edit.py` (`EditTools`)**: Surgical DOM mutations (`mutate_element`, `find_and_replace`, `compose_document`, `debloat_document`).
+- **`tools_format.py` (`FormatTools`)**: OpenXML styling (`set_page_layout`, `update_styles`, `format_table_grid`, `clean_structure`).
+- **`engine.py` (`DocxEngine`)**: Assembles `DocxEngine(ReadTools, EditTools, FormatTools)` with zero behavior change.
+
+### Live Microsoft Word COM Backend (`src/live/`)
+- **`worker.py`**: Single-threaded STA `ComWorker` thread, com error detection, and `com_worker` singleton.
+- **`undo.py`**: Atomic Word `Application.UndoRecord` context manager (`live_call`) and Track Changes scoping (`tracking`).
+- **`router.py`**: Dynamic backend routing (`pick_backend`, `find_open_document`, `has_word_lock_file`).
+- **`indexer.py`**: Document-order 0-based coordinate mapping (`_build_visible_map`, `_visible_map`, `_com_idx`, `_get_local_outline`).
+- **`tools_read.py` (`ReadTools`)**: Live COM `read_document` with fast heading detection.
+- **`tools_edit.py` (`EditTools`)**: Live COM mutations (`mutate_element`, `find_and_replace`, `compose_document`) wrapped in UndoRecord.
+- **`tools_format.py` (`FormatTools`, `_hex_to_bgr`)**: Live COM styling (`set_page_layout`, `update_styles`, `format_table_grid`, `clean_structure`).
+- **`engine.py` (`LiveWordEngine`)**: Assembles `LiveWordEngine(ReadTools, EditTools, FormatTools)` with zero behavior change.
+
+### Backward-Compatibility Facades
+- **`src/oxml_engine.py`**: Re-exports all symbols from `src.core` and `src.headless` with explicit `__all__`.
+- **`src/live_engine.py`**: Re-exports all symbols from `src.core` and `src.live` with explicit `__all__`.
+
+### FastMCP Server (`src/server.py`)
 The FastMCP entry point running over standard I/O (`stdio`). It sets the working directory to `PROJECT_ROOT`, manages automatic document backups, dynamically routes calls between headless and live backends via `pick_backend()`, and exposes the 8 MCP tools.
 
 ---
