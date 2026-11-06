@@ -79,7 +79,7 @@ Tool Invocation (file_path)
           ▼
    pick_backend()
    ├── 1. Env WORD_BACKEND == "headless" ────────────────────────► Headless
-   │      (WORD_BACKEND="live" forces live and raises LiveWordError if not open; see WORKSPACE.md §6)
+   │      (WORD_BACKEND="live" forces live and raises LiveWordError if not open; see WORKSPACE.md §7)
    ├── 2. pywin32 missing OR Word inactive ──► Check lock file ──► Headless (or reject mutating)
    ├── 3. Document found in Word.Application.Documents ──────────► Live COM
    ├── 4. Document in ProtectedViewWindows ──────────────────────► Raise LiveWordError
