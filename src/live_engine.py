@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Tupl
 
 from src.core.exceptions import ERROR_MESSAGES, LiveWordError
 from src.core.paths import _norm, paths_match
+from src.live.undo import live_call, tracking
 from src.live.worker import HAS_COM, ComWorker, com_worker
 from src.oxml_engine import OUTLINE_LINE_LIMIT
 
@@ -219,69 +220,6 @@ def _com_idx(doc: Any, n: int) -> int:
         valid = f"0..{len(indices) - 1}" if indices else "empty"
         raise LiveWordError(ERROR_MESSAGES["index_out_of_range"].format(target_index=n, valid_range=valid))
     return indices[n]
-
-
-# ---------------------------------------------------------------------------
-# Undo & Track Changes Wrappers (Section 3.6, C5)
-# ---------------------------------------------------------------------------
-@contextmanager
-def tracking(doc: Any, on: bool) -> Generator[None, None, None]:
-    """Temporarily flip TrackRevisions for a sub-step inside an existing undo record."""
-    prev_track = None
-    try:
-        prev_track = doc.TrackRevisions
-        doc.TrackRevisions = on
-    except Exception:
-        pass
-
-    try:
-        yield
-    finally:
-        if prev_track is not None:
-            try:
-                doc.TrackRevisions = prev_track
-            except Exception:
-                pass
-
-
-@contextmanager
-def live_call(
-    doc: Any,
-    tool_name: str,
-    target_desc: str,
-    *,
-    track: Optional[bool] = None,
-) -> Generator[None, None, None]:
-    """Context manager for all mutating live COM calls ensuring exactly one undo step (C5)."""
-    undo_record = None
-    prev_track = None
-    try:
-        app = doc.Application
-        undo_record = app.UndoRecord
-        undo_record.StartCustomRecord(f"Agent: {tool_name} {target_desc}")
-    except Exception:
-        undo_record = None
-
-    try:
-        prev_track = doc.TrackRevisions
-        if track is True:
-            doc.TrackRevisions = True
-    except Exception:
-        pass
-
-    try:
-        yield
-    finally:
-        if prev_track is not None:
-            try:
-                doc.TrackRevisions = prev_track
-            except Exception:
-                pass
-        if undo_record is not None:
-            try:
-                undo_record.EndCustomRecord()
-            except Exception:
-                pass
 
 
 # ---------------------------------------------------------------------------
