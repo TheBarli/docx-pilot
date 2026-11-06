@@ -50,6 +50,9 @@ RPR_ORDER = [
     "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath", "rPrChange",
 ]
 
+OUTLINE_LINE_LIMIT: int = 40
+
+
 
 def reorder_children(parent: etree._Element, order_list: List[str]) -> None:
     """Sort children of an XML element according to ECMA-376 sequence specification."""
@@ -148,7 +151,7 @@ class DocxEngine:
                         text_snippet = p.text.strip()
                         style_name = p.style.name if p.style else "Normal"
                         is_heading = style_name.lower().startswith("heading") or style_name.lower() == "title"
-                        if is_heading or (len(lines) < 40 and text_snippet):
+                        if is_heading or (len(lines) < OUTLINE_LINE_LIMIT and text_snippet):
                             preview = (text_snippet[:80] + "...") if len(text_snippet) > 80 else text_snippet
                             preview_text = f": \"{preview}\"" if preview else " (empty)"
                             lines.append(f"- `[p:{p_idx}]` **({style_name})**{preview_text}")

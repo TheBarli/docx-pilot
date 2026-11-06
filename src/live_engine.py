@@ -16,6 +16,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union
 
+from src.oxml_engine import OUTLINE_LINE_LIMIT
+
 # ---------------------------------------------------------------------------
 # Guarded COM Imports (C2: pywin32 is optional)
 # ---------------------------------------------------------------------------
@@ -739,13 +741,13 @@ class LiveWordEngine:
                         com_i = elem[3]
 
                         is_known_heading = com_i in heading_com_indices
-                        if is_known_heading or len(lines) < 40 or not items:
+                        if is_known_heading or len(lines) < OUTLINE_LINE_LIMIT or not items:
                             try:
                                 p = doc.Paragraphs.Item(com_i)
                                 style_name = str(p.Style.NameLocal) if p.Style else "Normal"
                                 is_heading = is_known_heading or style_name.lower().startswith("heading") or style_name.lower() == "title"
                                 text_snippet = p.Range.Text.rstrip("\r\n\x07").strip()
-                                if is_heading or (len(lines) < 40 and text_snippet):
+                                if is_heading or (len(lines) < OUTLINE_LINE_LIMIT and text_snippet):
                                     preview = (text_snippet[:80] + "...") if len(text_snippet) > 80 else text_snippet
                                     preview_text = f": \"{preview}\"" if preview else " (empty)"
                                     lines.append(f"- `[p:{zero_idx}]` **({style_name})**{preview_text}")
