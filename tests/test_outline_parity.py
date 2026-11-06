@@ -180,3 +180,4 @@ def test_outline_performance_1000_paragraphs(tmp_path: Path):
     assert elapsed < 2.0, f"Outline extraction exceeded 2.0s budget: {elapsed:.3f}s"
     assert "Major Section 1" in outline
     assert "Major Section 20" in outline
+
