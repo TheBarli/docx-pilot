@@ -59,7 +59,7 @@ MsWord-ai-integration/
 ├── .python-version                         # Pinned Python version (3.11.9)
 ├── demo.py                                 # Self-contained end-to-end demo script
 ├── pytest.ini                              # Pytest configuration and live test marker registration
-├── requirements.txt                        # Pinned production and test dependencies
+├── requirements.txt                        # Runtime and test dependencies (minimum versions)
 ├── README.md                               # Public-facing repository documentation
 ├── WORKSPACE.md                            # Comprehensive workspace architecture guide
 └── WORKSPACE_REVIEW.md                     # Workspace audit and gate verification status
