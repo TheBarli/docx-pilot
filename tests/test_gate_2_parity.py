@@ -21,6 +21,21 @@ from src.live_engine import LiveWordEngine, com_worker, HAS_COM
 pytestmark = pytest.mark.live
 
 
+def _is_word_active() -> bool:
+    if not HAS_COM:
+        return False
+    try:
+        def _check():
+            try:
+                app = win32com.client.GetActiveObject("Word.Application")
+                return app is not None
+            except Exception:
+                return False
+        return bool(com_worker.run(_check, timeout=3.0))
+    except Exception:
+        return False
+
+
 def create_sample_doc(target_path: Path):
     """Create sample unstyled document containing headings, paragraphs, empty paragraphs, and a table."""
     actions = [
@@ -148,8 +163,8 @@ def run_pipeline_live(file_path: str, preset: dict) -> dict:
 
 
 def test_academic_id_pipeline_parity(tmp_path: Path):
-    if not HAS_COM:
-        pytest.skip("pywin32 not available")
+    if not _is_word_active():
+        pytest.skip("Microsoft Word is not active.")
 
     preset_path = Path(".agents/presets/academic-id.yaml")
     with open(preset_path, "r", encoding="utf-8") as f:
