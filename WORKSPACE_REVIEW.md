@@ -4,7 +4,7 @@
 **Current Branch:** `feat/live-word-backend`  
 **Base Tracking:** `origin/refactor/mcp-and-directory-cleanup` (Default: `origin/master`)  
 **Environment:** Python 3.11.9 (`.venv`), FastMCP 4.0+, Windows COM (`pywin32` 312)  
-**Status:** **Phases 0–4 Live Word Backend Implemented | Automated Gates 0, 2, 3 Passed | 55 Passed with Word Running (13 Skipped When Word Closed) | Pending Human Gates 1 & 4**
+**Status:** **Phases 0–2 and 4 implemented; Phase 3 partial (see Known Limitations) | Automated Gates 0, 2, 3 Passed | 59 Passed with Word Running (13 Skipped When Word Closed) | Pending Human Gates 1 & 4**
 
 ---
 
@@ -161,7 +161,7 @@ With Microsoft Word closed:  42 passed, 13 skipped
 | **Gate 0** | Preparation & COM Worker Safety | Automated | **PASSED** | Worker unit tests pass; `HAS_COM=False` headless fallback verified. |
 | **Gate 1** | Interactive Live Checklist | **[HUMAN]** | **PENDING USER SIGN-OFF** | Requires user verification in active Word session on `documents/live_test.docx`: (1) edit appears within ~1s, (2) single Ctrl+Z undo, (3) tracked change displayed, (4) headless fallback on close, (5) out-of-range clean error, (6) modal dialog timeout and recovery. |
 | **Gate 2** | Tool Parity Comparison | Automated | **PASSED** | `academic-id.yaml` pipeline executed live and headless on identical input; metadata, layout, and styles match. |
-| **Gate 3** | Full Test Parity & Dry Run | Automated | **PASSED** | 55 automated tests passing with Word open; 13 skipped when Word closed; `dry_run` verified. |
+| **Gate 3** | Full Test Parity & Dry Run | Automated | **PASSED** | Automated tests passing with Word open (13 skipped when Word closed); `dry_run` verified on `clean_structure` only. |
 | **Gate 4** | Final Launch & Merge Review | **[HUMAN]** | **PENDING USER SIGN-OFF** | User review of Draft PR #2, documentation, rules, and skills before merging to `master`. |
 
 ### Gate 1 [HUMAN] Checklist (For User Sign-off)
