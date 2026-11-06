@@ -1,6 +1,6 @@
-# Workspace Architectural Overview: MsWord-ai-integration
+# Workspace Architectural Overview: docx-pilot
 
-Welcome to the **MsWord-ai-integration** workspace. This repository contains an isolated, production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server engineered specifically for AI coding assistants (such as Antigravity IDE) to generate, inspect, surgically mutate, and format Microsoft Word (`.docx`) documents with high token efficiency and zero OpenXML schema corruption.
+Welcome to the **docx-pilot** workspace. This repository contains an isolated, production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server engineered specifically for AI coding assistants (such as Antigravity IDE) to generate, inspect, surgically mutate, and format Microsoft Word (`.docx`) documents with high token efficiency and zero OpenXML schema corruption.
 
 ---
 
@@ -21,7 +21,7 @@ This workspace solves those problems using three foundational pillars:
 ## 2. Workspace Directory Structure
 
 ```text
-MsWord-ai-integration/
+docx-pilot/
 ├── .agents/                                # Antigravity agent configuration & presets
 │   ├── mcp_config.json                     # Portable workspace-level MCP registration
 │   ├── presets/                            # Standardized document formatting profiles (YAML)

@@ -19,7 +19,7 @@ A high-performance, token-efficient Model Context Protocol (MCP) server for insp
 ## File Structure
 
 ```text
-MsWord-ai-integration/
+docx-pilot/
 ├── .agents/
 │   ├── presets/                        # Formatting profiles (academic-id, clean-uniform)
 │   ├── rules/                          # Document styling orchestration rules

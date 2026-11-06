@@ -1,6 +1,6 @@
-# Workspace Review: MsWord-ai-integration
+# Workspace Review: docx-pilot
 
-**Repository:** `TheBarli/MsWord-ai-integration`  
+**Repository:** `TheBarli/docx-pilot`  
 **Current Branch:** `master`  
 **Base Tracking:** `origin/master`  
 **Environment:** Python 3.11.9 (`.venv`), FastMCP 4.0+, Windows COM (`pywin32` 312)  
@@ -21,7 +21,7 @@ All 8 tools across the unified MCP surface are implemented for both headless and
 ## 2. Directory Architecture & Component Inventory
 
 ```text
-MsWord-ai-integration/
+docx-pilot/
 ├── .agents/                                # Agent configuration & formatting orchestration
 │   ├── mcp_config.json                     # Portable workspace MCP registration (python src/server.py)
 │   ├── presets/                            # Standardized YAML document formatting profiles
@@ -181,7 +181,7 @@ Executed on `documents/live_test.docx`:
 ## 8. Git Health & PR Status
 
 * **Branch:** `master`
-* **Merged PR:** #2 (`https://github.com/TheBarli/MsWord-ai-integration/pull/2`) squash-merged into `master` on 2026-11-06.
+* **Merged PR:** #2 (`https://github.com/TheBarli/docx-pilot/pull/2`) squash-merged into `master` on 2026-11-06.
 * **Backup Tag:** `backup/live-word-pre-merge`
 * **Scratch Directory:** `scratch/` tracked via `scratch/.gitkeep`; contents (`scratch/*`) gitignored.
 * **Auxiliary Information:** `.agent-info/` excluded locally in `.git/info/exclude` and `.gitignore`, untracked from Git.
