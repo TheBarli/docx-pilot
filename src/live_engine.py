@@ -522,7 +522,26 @@ def _build_visible_map(doc: Any) -> Dict[str, Any]:
     except Exception:
         pass
 
-    visible_indices = [i for i in range(1, total_p + 1) if i not in table_p_set]
+    # Exclude paragraphs that are fully tracked deletions
+    deleted_p_set = set()
+    try:
+        if doc.Revisions.Count > 0:
+            for rev in doc.Revisions:
+                if getattr(rev, "Type", None) == WD_REVISION_DELETE:
+                    r = rev.Range
+                    p_first = doc.Range(0, r.Start).Paragraphs.Count + 1
+                    p_last = doc.Range(0, r.End).Paragraphs.Count
+                    for p_i in range(p_first, p_last + 1):
+                        try:
+                            p_rng = doc.Paragraphs.Item(p_i).Range
+                            if r.Start <= p_rng.Start and r.End >= p_rng.End:
+                                deleted_p_set.add(p_i)
+                        except Exception:
+                            pass
+    except Exception:
+        pass
+
+    visible_indices = [i for i in range(1, total_p + 1) if i not in table_p_set and i not in deleted_p_set]
     return {
         "indices": visible_indices,
         "deleted_spans": {},
@@ -650,13 +669,35 @@ class LiveWordEngine:
                     "",
                     "### Structural Elements (0-based indices):",
                 ]
+
+                # Map table positions (1-based COM paragraph index where table starts)
+                tbl_positions = []
+                for t_idx in range(1, num_tables + 1):
+                    try:
+                        tr = tables.Item(t_idx).Range
+                        p_start = doc.Range(0, tr.Start).Paragraphs.Count + 1
+                        tbl_positions.append((p_start, t_idx))
+                    except Exception:
+                        tbl_positions.append((float("inf"), t_idx))
+
+                # Combine body paragraphs and tables into a single document-order list
+                elements = []
+                for zero_idx, com_i in enumerate(body_indices):
+                    elements.append((com_i, "p", zero_idx, com_i))
+                for p_start, t_idx in tbl_positions:
+                    elements.append((p_start, "tbl", t_idx - 1, t_idx))
+
+                # Sort elements in document order
+                elements.sort(key=lambda x: (x[0], 0 if x[1] == "tbl" else 1))
+
+                # Fast heading detection: query doc.GetCrossReferenceItems(1)
+                heading_com_indices = set()
                 try:
                     items = doc.GetCrossReferenceItems(1)  # wdRefTypeHeading = 1
                 except Exception:
                     items = ()
 
                 if items:
-                    com_to_zero = {com_i: idx for idx, com_i in enumerate(body_indices)}
                     rng = doc.Content
                     f = rng.Find
                     for heading_text in items:
@@ -666,23 +707,50 @@ class LiveWordEngine:
                         f.ClearFormatting()
                         if f.Execute(FindText=clean, Forward=True):
                             p_obj = rng.Paragraphs.Item(1)
-                            com_i = doc.Range(0, p_obj.Range.End).Paragraphs.Count
-                            zero_idx = com_to_zero.get(com_i, 0)
-                            style_name = str(p_obj.Style.NameLocal)
-                            lines.append(f"- `[p:{zero_idx}]` **({style_name})**: \"{clean[:80]}\"")
+                            c_i = doc.Range(0, p_obj.Range.End).Paragraphs.Count
+                            heading_com_indices.add(c_i)
                             rng.Collapse(0)
-                else:
-                    for zero_idx, com_i in enumerate(body_indices):
-                        p = doc.Paragraphs.Item(com_i)
-                        style_name = str(p.Style.NameLocal)
-                        outline_lvl = getattr(p, "OutlineLevel", WD_OUTLINE_LEVEL_BODY)
-                        if outline_lvl < WD_OUTLINE_LEVEL_BODY or "heading" in style_name.lower():
-                            txt = p.Range.Text.rstrip("\r\n\x07")
-                            lines.append(f"- `[p:{zero_idx}]` **({style_name})**: \"{txt[:80]}\"")
 
-                for t_idx in range(1, num_tables + 1):
-                    tbl = tables.Item(t_idx)
-                    lines.append(f"- `[table:{t_idx - 1}]` **Table ({tbl.Rows.Count} rows x {tbl.Columns.Count} cols)**")
+                for elem in elements:
+                    elem_type = elem[1]
+                    if elem_type == "tbl":
+                        tbl_idx = elem[2]
+                        t_idx = elem[3]
+                        try:
+                            tbl = tables.Item(t_idx)
+                            row_cnt = tbl.Rows.Count
+                            col_cnt = tbl.Columns.Count
+                            header_preview = []
+                            if row_cnt > 0:
+                                first_row = tbl.Rows.Item(1)
+                                for c_i in range(1, min(col_cnt, 4) + 1):
+                                    try:
+                                        c_txt = first_row.Cells.Item(c_i).Range.Text.rstrip("\r\n\x07").strip()
+                                        header_preview.append(c_txt)
+                                    except Exception:
+                                        pass
+                            header_str = " | ".join(header_preview)
+                            lines.append(f"- `[table:{tbl_idx}]` **Table ({row_cnt} rows x {col_cnt} cols)**: [{header_str}]")
+                        except Exception:
+                            lines.append(f"- `[table:{tbl_idx}]` **Table**")
+
+                    elif elem_type == "p":
+                        zero_idx = elem[2]
+                        com_i = elem[3]
+
+                        is_known_heading = com_i in heading_com_indices
+                        if is_known_heading or len(lines) < 40 or not items:
+                            try:
+                                p = doc.Paragraphs.Item(com_i)
+                                style_name = str(p.Style.NameLocal) if p.Style else "Normal"
+                                is_heading = is_known_heading or style_name.lower().startswith("heading") or style_name.lower() == "title"
+                                text_snippet = p.Range.Text.rstrip("\r\n\x07").strip()
+                                if is_heading or (len(lines) < 40 and text_snippet):
+                                    preview = (text_snippet[:80] + "...") if len(text_snippet) > 80 else text_snippet
+                                    preview_text = f": \"{preview}\"" if preview else " (empty)"
+                                    lines.append(f"- `[p:{zero_idx}]` **({style_name})**{preview_text}")
+                            except Exception:
+                                continue
 
                 return "\n".join(lines)
 
