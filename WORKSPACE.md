@@ -146,8 +146,8 @@ The server supports transparent dual-backend operation:
 
 2. **Live Microsoft Word Engine ([`src/live_engine.py`](src/live_engine.py))**:
    - Automatically detects if the document is active in Microsoft Word using `GetActiveObject("Word.Application")`.
-   - Interacts live via Windows COM with zero external window spawning (Rule C4).
-   - Groups multi-step actions inside Word's `Application.UndoRecord` so **every tool call can be rolled back with a single `Ctrl + Z`** (Rule C5).
+   - Interacts live via Windows COM with zero external window spawning; the live engine never launches Word, only attaching to an already running instance.
+   - Groups multi-step actions inside Word's `Application.UndoRecord` so that each live tool call is a single undo step (`Ctrl + Z`); content edits are tracked, pure formatting edits are untracked.
    - Visual Track Changes for mutations and text replacements.
    - Dedicated single-threaded worker (`ComWorker`) with 20s timeout and poisoned-state protection.
    - Re-entrancy protection and Windows desktop station bridging (`SetThreadDesktop("Default")`).
