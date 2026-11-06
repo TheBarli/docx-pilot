@@ -14,7 +14,7 @@ import threading
 from concurrent.futures import Future
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Tuple, Union
 
 from src.oxml_engine import OUTLINE_LINE_LIMIT
 
