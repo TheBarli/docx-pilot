@@ -81,8 +81,8 @@ class TestNormalizePath:
 
     def test_relative_resolves_to_project_root(self, tmp_path: Path, monkeypatch):
         # Point PROJECT_ROOT to tmp_path so "relative/file.docx" resolves there
-        import src.oxml_engine as engine_mod
-        monkeypatch.setattr(engine_mod, "PROJECT_ROOT", tmp_path)
+        import src.core.paths as paths_mod
+        monkeypatch.setattr(paths_mod, "PROJECT_ROOT", tmp_path)
         (tmp_path / "relative").mkdir()
         f = tmp_path / "relative" / "file.docx"
         f.write_bytes(b"x")

@@ -30,6 +30,7 @@ from src.core.constants import (
     STYLE_ORDER,
     W_NS,
 )
+from src.core.paths import normalize_path
 
 
 
@@ -42,20 +43,6 @@ def reorder_children(parent: etree._Element, order_list: List[str]) -> None:
         parent.remove(c)
     for c in children:
         parent.append(c)
-
-
-def normalize_path(file_path: str) -> Path:
-    """Normalize file path and resolve to absolute path, checking workspace root if relative."""
-    p = Path(file_path).expanduser()
-    if p.is_absolute() and p.exists():
-        return p.resolve()
-    cwd_candidate = (Path.cwd() / p).resolve()
-    if cwd_candidate.exists():
-        return cwd_candidate
-    root_candidate = (PROJECT_ROOT / p).resolve()
-    if root_candidate.exists() or not p.is_absolute():
-        return root_candidate
-    return p.resolve()
 
 
 def get_or_create_document(file_path: str, create_if_missing: bool = False) -> Tuple[Document, Path]:

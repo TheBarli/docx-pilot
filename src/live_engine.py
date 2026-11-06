@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Tuple, Union
 
 from src.core.exceptions import ERROR_MESSAGES, LiveWordError
+from src.core.paths import _norm, paths_match
 from src.oxml_engine import OUTLINE_LINE_LIMIT
 
 # ---------------------------------------------------------------------------
@@ -31,44 +32,6 @@ try:
         HAS_COM = True
 except ImportError:
     HAS_COM = False
-
-
-# ---------------------------------------------------------------------------
-# Path Normalization & Matching (Section 3.2)
-# ---------------------------------------------------------------------------
-def _norm(file_path: Union[str, Path]) -> str:
-    """Normalize path: realpath, normcase, and expand 8.3 short names if on Windows."""
-    p_str = str(file_path)
-    try:
-        real_p = os.path.realpath(p_str)
-    except Exception:
-        real_p = p_str
-
-    norm_p = os.path.normcase(real_p)
-    if HAS_COM and sys.platform == "win32" and os.path.exists(norm_p):
-        try:
-            expanded = win32api.GetLongPathName(norm_p)
-            norm_p = os.path.normcase(expanded)
-        except Exception:
-            pass
-    return norm_p
-
-
-def paths_match(path1: Union[str, Path], path2: Union[str, Path]) -> bool:
-    """Compare two paths accurately across case, short names, and mapped drives."""
-    n1 = _norm(path1)
-    n2 = _norm(path2)
-    if n1 == n2:
-        return True
-
-    s1 = str(path1)
-    s2 = str(path2)
-    if os.path.exists(s1) and os.path.exists(s2):
-        try:
-            return os.path.samefile(s1, s2)
-        except Exception:
-            pass
-    return False
 
 
 def has_word_lock_file(file_path: Union[str, Path]) -> bool:
