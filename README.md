@@ -322,3 +322,10 @@ The test suite provides 100% automated verification for both headless operations
 * **Gate 2:** Full styling pipeline parity between headless and live engines verified.
 * **Gate 3:** 59 automated test cases passing with scoped `dry_run` verification.
 * **Gate 4:** Final launch review and merge into `main` (2026-11-06).
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
